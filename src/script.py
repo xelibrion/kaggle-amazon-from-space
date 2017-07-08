@@ -21,9 +21,11 @@ x_train = []
 x_test = []
 y_train = []
 
-path = ""
+model_batch_size = os.environ.get('MODEL_BATCH_SIZE', 256)
+
+basepath = ""
 name = "Unet"
-weights_path = path + name + '.h5'
+weights_path = os.path.join(basepath, name + '.h5')
 
 df_train = pd.read_csv('../input/train_v2.csv')
 df_test = pd.read_csv('../input/sample_submission_v2.csv')
@@ -61,15 +63,18 @@ label_map = {
 img_size = 64
 channels = 4  #4 for tiff, 3 for jpeg
 
-for f, tags in tqdm(df_test.values[:200], miniters=1000):
+print("Resizing test set")
+for f, tags in tqdm(df_test.values, miniters=1000):
     img = cv2.imread('../input/test-tif-v2/{}.tif'.format(f), -1)
     x_test.append(cv2.resize(img, (img_size, img_size)))
 x_test = np.array(x_test, np.float32) / 255.
 
-for f, tags in tqdm(df_train.values[:200], miniters=1000):
+print("Resizing train set")
+for f, tags in tqdm(df_train.values, miniters=1000):
     #https://stackoverflow.com/questions/37512119/resize-transparent-image-in-opencv-python-cv2
     #If you load a 4 channel image, the flag -1 indicates that the image is loaded unchanged, so you can load and split all 4 channels directly.
-    img = cv2.imread('../input/train-tif-v2/{}.tif'.format(f), -1)  #0-1 voir au dessus les 2 comments
+    img = cv2.imread('../input/train-tif-v2/{}.tif'.format(f),
+                     -1)  #0-1 voir au dessus les 2 comments
     targets = np.zeros(17)
     for t in tags.split(' '):
         targets[label_map[t]] = 1
@@ -78,13 +83,13 @@ for f, tags in tqdm(df_train.values[:200], miniters=1000):
 y_train = np.array(y_train, np.uint8)
 x_train = np.array(x_train, np.float32) / 255.
 
+print("x_train shape:")
 print(x_train.shape)
+print("y_train shape:")
 print(y_train.shape)
 
 X_train, X_val, Y_train, Y_val = train_test_split(
-    x_train,
-    y_train,
-    test_size=0.2)
+    x_train, y_train, test_size=0.2)
 
 print('Split train: ', len(X_train), len(Y_train))
 print('Split valid: ', len(X_val), len(Y_val))
@@ -115,70 +120,60 @@ def get_unet(n_ch, patch_height, patch_width):
     inputs = Input((patch_height, patch_width, n_ch))
 
     conv1 = Conv2D(
-        32,
-        (3, 3),
+        32, (3, 3),
         padding="same",
         name="conv1_1",
         activation="relu",
         data_format="channels_last")(inputs)
     conv1 = Conv2D(
-        32,
-        (3, 3),
+        32, (3, 3),
         padding="same",
         activation="relu",
         data_format="channels_last")(conv1)
     pool1 = MaxPooling2D(pool_size=(2, 2), data_format="channels_last")(conv1)
     conv2 = Conv2D(
-        64,
-        (3, 3),
+        64, (3, 3),
         padding="same",
         activation="relu",
         data_format="channels_last")(pool1)
     conv2 = Conv2D(
-        64,
-        (3, 3),
+        64, (3, 3),
         padding="same",
         activation="relu",
         data_format="channels_last")(conv2)
     pool2 = MaxPooling2D(pool_size=(2, 2), data_format="channels_last")(conv2)
 
     conv3 = Conv2D(
-        128,
-        (3, 3),
+        128, (3, 3),
         padding="same",
         activation="relu",
         data_format="channels_last")(pool2)
     conv3 = Conv2D(
-        128,
-        (3, 3),
+        128, (3, 3),
         padding="same",
         activation="relu",
         data_format="channels_last")(conv3)
     pool3 = MaxPooling2D(pool_size=(2, 2), data_format="channels_last")(conv3)
 
     conv4 = Conv2D(
-        256,
-        (3, 3),
+        256, (3, 3),
         padding="same",
         activation="relu",
         data_format="channels_last")(pool3)
     conv4 = Conv2D(
-        256,
-        (3, 3),
+        256, (3, 3),
         padding="same",
         activation="relu",
         data_format="channels_last")(conv4)
     pool4 = MaxPooling2D(pool_size=(2, 2), data_format="channels_last")(conv4)
 
     conv5 = Conv2D(
-        512,
-        (3, 3),
+        512, (3, 3),
         padding="same",
         activation="relu",
         data_format="channels_last")(pool4)
     conv5 = Conv2D(
-        512,
-        (3, 3),
+        512, (3, 3),
         padding="same",
         activation="relu",
         data_format="channels_last")(conv5)
@@ -186,18 +181,15 @@ def get_unet(n_ch, patch_height, patch_width):
     up_conv5 = UpSampling2D(size=(2, 2), data_format="channels_last")(conv5)
     ch, cw = get_crop_shape(conv4, up_conv5)
     crop_conv4 = Cropping2D(
-        cropping=(ch, cw),
-        data_format="channels_last")(conv4)
+        cropping=(ch, cw), data_format="channels_last")(conv4)
     up6 = concatenate([up_conv5, crop_conv4], axis=concat_axis)
     conv6 = Conv2D(
-        256,
-        (3, 3),
+        256, (3, 3),
         padding="same",
         activation="relu",
         data_format="channels_last")(up6)
     conv6 = Conv2D(
-        256,
-        (3, 3),
+        256, (3, 3),
         padding="same",
         activation="relu",
         data_format="channels_last")(conv6)
@@ -205,18 +197,15 @@ def get_unet(n_ch, patch_height, patch_width):
     up_conv6 = UpSampling2D(size=(2, 2), data_format="channels_last")(conv6)
     ch, cw = get_crop_shape(conv3, up_conv6)
     crop_conv3 = Cropping2D(
-        cropping=(ch, cw),
-        data_format="channels_last")(conv3)
+        cropping=(ch, cw), data_format="channels_last")(conv3)
     up7 = concatenate([up_conv6, crop_conv3], axis=concat_axis)
     conv7 = Conv2D(
-        128,
-        (3, 3),
+        128, (3, 3),
         padding="same",
         activation="relu",
         data_format="channels_last")(up7)
     conv7 = Conv2D(
-        128,
-        (3, 3),
+        128, (3, 3),
         padding="same",
         activation="relu",
         data_format="channels_last")(conv7)
@@ -224,18 +213,15 @@ def get_unet(n_ch, patch_height, patch_width):
     up_conv7 = UpSampling2D(size=(2, 2), data_format="channels_last")(conv7)
     ch, cw = get_crop_shape(conv2, up_conv7)
     crop_conv2 = Cropping2D(
-        cropping=(ch, cw),
-        data_format="channels_last")(conv2)
+        cropping=(ch, cw), data_format="channels_last")(conv2)
     up8 = concatenate([up_conv7, crop_conv2], axis=concat_axis)
     conv8 = Conv2D(
-        64,
-        (3, 3),
+        64, (3, 3),
         padding="same",
         activation="relu",
         data_format="channels_last")(up8)
     conv8 = Conv2D(
-        64,
-        (3, 3),
+        64, (3, 3),
         padding="same",
         activation="relu",
         data_format="channels_last")(conv8)
@@ -243,18 +229,15 @@ def get_unet(n_ch, patch_height, patch_width):
     up_conv8 = UpSampling2D(size=(2, 2), data_format="channels_last")(conv8)
     ch, cw = get_crop_shape(conv1, up_conv8)
     crop_conv1 = Cropping2D(
-        cropping=(ch, cw),
-        data_format="channels_last")(conv1)
+        cropping=(ch, cw), data_format="channels_last")(conv1)
     up9 = concatenate([up_conv8, crop_conv1], axis=concat_axis)
     conv9 = Conv2D(
-        32,
-        (3, 3),
+        32, (3, 3),
         padding="same",
         activation="relu",
         data_format="channels_last")(up9)
     conv9 = Conv2D(
-        32,
-        (3, 3),
+        32, (3, 3),
         padding="same",
         activation="relu",
         data_format="channels_last")(conv9)
@@ -279,6 +262,8 @@ epochs_arr = [20, 5, 5]
 learn_rates = [0.001, 0.0003, 0.0001]
 
 for learn_rate, epochs in zip(learn_rates, epochs_arr):
+    print("\nStarting new iteration: LR={}, number of epochs={}".format(
+        learn_rate, epochs))
     if os.path.isfile(weights_path):
         print("loading existing weight for training")
         model.load_weights(weights_path)
@@ -290,35 +275,36 @@ for learn_rate, epochs in zip(learn_rates, epochs_arr):
         optimizer=opt,
         metrics=['accuracy'])
     callbacks = [
-        EarlyStopping(monitor='val_loss',
-                      patience=2,
-                      verbose=1), ModelCheckpoint(
-                          weights_path,
-                          monitor='val_loss',
-                          save_best_only=True,
-                          verbose=2)
+        EarlyStopping(monitor='val_loss', patience=2, verbose=1),
+        ModelCheckpoint(
+            weights_path, monitor='val_loss', save_best_only=True, verbose=2)
     ]
 
     model.fit(
         x=X_train,
         y=Y_train,
         validation_data=(X_val, Y_val),
-        batch_size=256,
+        batch_size=model_batch_size,
         verbose=2,
         epochs=epochs,
         callbacks=callbacks,
         shuffle=True)
+print("Training complete\n")
 
 if os.path.isfile(weights_path):
     model.load_weights(weights_path)
 
 p_val = model.predict(X_val, batch_size=128, verbose=1)
+print("F-beta on validation set:")
 print(fbeta_score(Y_val, np.array(p_val) > 0.2, beta=2, average='samples'))
 
 p_test = model.predict(x_test, batch_size=128, verbose=1)
 
 result = p_test
 result = pd.DataFrame(result, columns=labels)
+
+print(result.info())
+print()
 
 from tqdm import tqdm
 preds = []
