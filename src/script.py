@@ -268,7 +268,7 @@ def get_unet(n_ch, patch_height, patch_width):
     BN = BatchNormalization()(Dense1)
     Dense2 = Dense(17, activation='sigmoid')(BN)
 
-    model = Model(input=inputs, output=Dense2)
+    model = Model(inputs=inputs, outputs=Dense2)
 
     return model
 
@@ -332,6 +332,4 @@ for i in tqdm(range(result.shape[0]), miniters=1000):
 
 df_test['tags'] = preds
 
-df_test.to_csv(
-    'F:/DS-main/Kaggle-main/Planet Understanding the Amazon from Space/submission_unet.csv',
-    index=False)
+df_test.to_csv('../output/submission_unet.csv', index=False)
