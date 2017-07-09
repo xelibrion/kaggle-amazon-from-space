@@ -1,4 +1,5 @@
-First you'd want to create list of files to be packed
+First you'd want to create list of files to be packed.
+The script assumes that images are stored in subfolders, all images belonging to one class - in one subfolder.
 
 #+BEGIN_SRC sh
 ./im2rec.py --list true --recursive true ../input/amazon-from-space ../input/train-jpg/
@@ -18,3 +19,6 @@ You can also use --chunks parameter for creating chunks for cross-validation
 #+BEGIN_SRC sh
 ./im2rec.py --num-thread 8 --chunks 5 ../input/amazon-from-space ../input/train-jpg/
 #+END_SRC
+
+IMPORTANT! For multi-label classification list file needs to be generated manually
+https://github.com/dmlc/mxnet/blob/master/docs/how_to/recordio.md
