@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from __future__ import print_function
 import os
@@ -64,7 +65,7 @@ def make_list(args):
         random.seed(100)
         random.shuffle(image_list)
     N = len(image_list)
-    chunk_size = (N + args.chunks - 1) / args.chunks
+    chunk_size = int((N + args.chunks - 1) / args.chunks)
     for i in xrange(args.chunks):
         chunk = image_list[i * chunk_size:(i + 1) * chunk_size]
         if args.chunks > 1:
