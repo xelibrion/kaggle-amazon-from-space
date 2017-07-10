@@ -1,0 +1,12 @@
+#+PROPERTY: header-args :results silent :tangle yes
+
+#+BEGIN_SRC ipython
+import mxnet as mx
+#+END_SRC
+
+#+BEGIN_SRC ipython :results replace
+syms = mx.sym.load('./resnet-50-symbol.json')
+
+#+END_SRC
+
+#+RESULTS:
