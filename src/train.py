@@ -12,6 +12,8 @@ from sklearn.model_selection import train_test_split
 
 from keras.callbacks import EarlyStopping, ModelCheckpoint, LearningRateScheduler
 from keras import optimizers
+from keras.models import Model
+from keras.layers import Dense, Activation
 
 model_batch_size = os.environ.get('MODEL_BATCH_SIZE', 256)
 
@@ -55,7 +57,7 @@ label_map = {
     'slash_burn': 8,
     'water': 15
 }
-
+num_classes = len(labels)
 img_size = 224
 channels = 4  # 4 for tiff, 3 for jpeg
 
@@ -95,10 +97,20 @@ print('Split valid: ', len(X_val), len(Y_val))
 
 weights_path = './densenet121_weights_tf.h5'
 
-model = DenseNet(reduction=0.5, classes=1000, weights_path=weights_path)
+base_model = DenseNet(reduction=0.5, classes=1000, weights_path=weights_path)
+base_model.layers.pop()
+base_model.layers.pop()
+for l in base_model.layers:
+    l.trainable = False
 
+x = base_model.layers[-1].output
+x = Dense(num_classes, name='fc6')(x)
+predictions = Activation('softmax', name='prob')(x)
+
+model = Model(inputs=base_model.input, outputs=predictions)
 opt = optimizers.Adam(lr=0.01)
 model.compile(loss='binary_crossentropy', optimizer=opt, metrics=['accuracy'])
+
 callbacks = [
     EarlyStopping(monitor='val_loss', patience=2, verbose=1),
     ModelCheckpoint(
