@@ -10,7 +10,7 @@ from tqdm import tqdm
 from sklearn.metrics import fbeta_score
 from sklearn.model_selection import train_test_split
 
-from keras.callbacks import EarlyStopping, ModelCheckpoint, LearningRateScheduler
+from keras.callbacks import EarlyStopping, ModelCheckpoint, LearningRateScheduler, ProgbarLogger
 from keras import optimizers
 from keras.models import Model
 from keras.layers import Dense, Activation
@@ -95,9 +95,11 @@ X_train, X_val, Y_train, Y_val = train_test_split(
 print('Split train: ', len(X_train), len(Y_train))
 print('Split valid: ', len(X_val), len(Y_val))
 
-weights_path = './densenet121_weights_tf.h5'
+imagenet_weights = './densenet121_weights_tf.h5'
+weights_path = './xelibrion_weights_tf.h5'
 
-base_model = DenseNet(reduction=0.5, classes=1000, weights_path=weights_path)
+base_model = DenseNet(
+    reduction=0.5, classes=1000, weights_path=imagenet_weights)
 base_model.layers.pop()
 base_model.layers.pop()
 for l in base_model.layers:
@@ -108,13 +110,27 @@ x = Dense(num_classes, name='fc6')(x)
 predictions = Activation('softmax', name='prob')(x)
 
 model = Model(inputs=base_model.input, outputs=predictions)
-opt = optimizers.Adam(lr=0.01)
+opt = optimizers.Adam()
 model.compile(loss='binary_crossentropy', optimizer=opt, metrics=['accuracy'])
+
+
+def lr_scheduler(epoch_idx):
+    if epoch_idx == 0:
+        return 0.003
+
+    if epoch_idx < 10:
+        return 0.01
+
+    if epoch_idx > 10:
+        return 0.001
+
 
 callbacks = [
     EarlyStopping(monitor='val_loss', patience=2, verbose=1),
     ModelCheckpoint(
-        weights_path, monitor='val_loss', save_best_only=True, verbose=2)
+        weights_path, monitor='val_loss', save_best_only=True, verbose=2),
+    ProgbarLogger(count_mode='samples'),
+    LearningRateScheduler(lr_scheduler)
 ]
 
 model.fit(
