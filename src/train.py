@@ -11,7 +11,7 @@ from sklearn.metrics import fbeta_score
 from sklearn.model_selection import train_test_split
 
 from keras.callbacks import (EarlyStopping, ModelCheckpoint,
-                             LearningRateScheduler, TensorBoard)
+                             LearningRateScheduler, TensorBoard, Callback)
 
 from keras import optimizers
 from keras.models import Model
@@ -126,23 +126,40 @@ def lr_scheduler(epoch_idx):
         return 0.001
 
 
+class Fbeta(Callback):
+    def on_train_begin(self, logs={}):
+        self.fbeta = []
+
+    def on_epoch_end(self, epoch, logs={}):
+        p_valid = self.model.predict(self.validation_data[0])
+        y_val = self.validation_data[1]
+        f_beta = fbeta_score(
+            y_val,
+            np.array(p_valid) > 0.2,
+            beta=2,
+            average='samples', )
+        self.fbeta.append(f_beta)
+        print("\nF-Beta: %.4f\n" % f_beta)
+
+
 callbacks = [
     EarlyStopping(monitor='val_loss', patience=2, verbose=1),
-    ModelCheckpoint(
-        weights_path, monitor='val_loss', save_best_only=True, verbose=1),
+    ModelCheckpoint(weights_path, monitor='val_loss', save_best_only=True),
     LearningRateScheduler(lr_scheduler),
     TensorBoard(
         log_dir='./logs',
-        histogram_freq=0,
+        histogram_freq=1,
         batch_size=32,
         write_graph=True,
         write_grads=False,
-        write_images=False,
+        write_images=True,
         embeddings_freq=0,
         embeddings_layer_names=None,
-        embeddings_metadata=None)
+        embeddings_metadata=None),
+    Fbeta()
 ]
 
+print("Starting training")
 model.fit(
     x=X_train,
     y=Y_train,
