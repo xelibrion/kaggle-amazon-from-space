@@ -10,12 +10,14 @@ from tqdm import tqdm
 from sklearn.metrics import fbeta_score
 from sklearn.model_selection import train_test_split
 
-from keras.callbacks import EarlyStopping, ModelCheckpoint, LearningRateScheduler, ProgbarLogger
+from keras.callbacks import (EarlyStopping, ModelCheckpoint,
+                             LearningRateScheduler, TensorBoard)
+
 from keras import optimizers
 from keras.models import Model
 from keras.layers import Dense, Activation
 
-model_batch_size = os.environ.get('MODEL_BATCH_SIZE', 256)
+model_batch_size = os.environ.get('MODEL_BATCH_SIZE', 4)
 
 
 def flatten(l):
@@ -59,7 +61,6 @@ label_map = {
 }
 num_classes = len(labels)
 img_size = 224
-channels = 4  # 4 for tiff, 3 for jpeg
 
 # print("Resizing test set")
 # for f, tags in tqdm(df_test.values, miniters=1000):
@@ -128,9 +129,18 @@ def lr_scheduler(epoch_idx):
 callbacks = [
     EarlyStopping(monitor='val_loss', patience=2, verbose=1),
     ModelCheckpoint(
-        weights_path, monitor='val_loss', save_best_only=True, verbose=2),
-    ProgbarLogger(count_mode='samples'),
-    LearningRateScheduler(lr_scheduler)
+        weights_path, monitor='val_loss', save_best_only=True, verbose=1),
+    LearningRateScheduler(lr_scheduler),
+    TensorBoard(
+        log_dir='./logs',
+        histogram_freq=0,
+        batch_size=32,
+        write_graph=True,
+        write_grads=False,
+        write_images=False,
+        embeddings_freq=0,
+        embeddings_layer_names=None,
+        embeddings_metadata=None)
 ]
 
 model.fit(
@@ -138,7 +148,7 @@ model.fit(
     y=Y_train,
     validation_data=(X_val, Y_val),
     batch_size=model_batch_size,
-    verbose=2,
+    verbose=1,
     epochs=20,
     callbacks=callbacks,
     shuffle=True)
