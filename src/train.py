@@ -5,6 +5,7 @@ from densenet121 import DenseNet
 import numpy as np
 import pandas as pd
 import cv2
+import platform
 
 from tqdm import tqdm
 from sklearn.metrics import fbeta_score
@@ -16,8 +17,11 @@ from keras.callbacks import (EarlyStopping, ModelCheckpoint,
 from keras import optimizers
 from keras.models import Model
 from keras.layers import Dense, Activation
+from keras.preprocessing.image import ImageDataGenerator
 
-model_batch_size = os.environ.get('MODEL_BATCH_SIZE', 4)
+train_dir = ('../input/train-jpg'
+             if platform.system() == 'Linux' else '../input/train-sample')
+model_batch_size = os.environ.get('MODEL_BATCH_SIZE', 256)
 
 
 def flatten(l):
@@ -70,7 +74,7 @@ img_size = 224
 
 print("Resizing train set")
 for f, tags in tqdm(df_train.values, miniters=1000):
-    img_path = '../input/train-sample/{}.jpg'.format(f)
+    img_path = '{}/{}.jpg'.format(train_dir, f)
     if not os.path.exists(img_path):
         continue
     # https://stackoverflow.com/questions/37512119/resize-transparent-image-in-opencv-python-cv2
@@ -97,7 +101,6 @@ print('Split train: ', len(X_train), len(Y_train))
 print('Split valid: ', len(X_val), len(Y_val))
 
 imagenet_weights = './densenet121_weights_tf.h5'
-weights_path = './xelibrion_weights_tf.h5'
 
 base_model = DenseNet(
     reduction=0.5, classes=1000, weights_path=imagenet_weights)
@@ -108,7 +111,7 @@ for l in base_model.layers:
 
 x = base_model.layers[-1].output
 x = Dense(num_classes, name='fc6')(x)
-predictions = Activation('softmax', name='prob')(x)
+predictions = Activation('sigmoid', name='prob')(x)
 
 model = Model(inputs=base_model.input, outputs=predictions)
 opt = optimizers.Adam()
@@ -135,7 +138,7 @@ class Fbeta(Callback):
         y_val = self.validation_data[1]
         f_beta = fbeta_score(
             y_val,
-            np.array(p_valid) > 0.2,
+            np.array(p_valid) > 0.5,
             beta=2,
             average='samples', )
         self.fbeta.append(f_beta)
@@ -144,7 +147,10 @@ class Fbeta(Callback):
 
 callbacks = [
     EarlyStopping(monitor='val_loss', patience=2, verbose=1),
-    ModelCheckpoint(weights_path, monitor='val_loss', save_best_only=True),
+    ModelCheckpoint(
+        './xelibrion_weights_tf-%d.h5',
+        monitor='val_loss',
+        save_best_only=True),
     LearningRateScheduler(lr_scheduler),
     TensorBoard(
         log_dir='./logs',
@@ -166,7 +172,7 @@ model.fit(
     validation_data=(X_val, Y_val),
     batch_size=model_batch_size,
     verbose=1,
-    epochs=20,
+    epochs=60,
     callbacks=callbacks,
     shuffle=True)
 print("Training complete\n")
