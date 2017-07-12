@@ -5,9 +5,7 @@ channels:
 dependencies:
 - h5py=2.7.0=np113py35_1
 - hdf5=1.8.18=0
-- libgfortran=3.0.0=0
 - tqdm=4.14.0=py35_0
-- appnope=0.1.0=py35_0
 - bleach=1.5.0=py35_0
 - cycler=0.10.0=py35_0
 - decorator=4.0.11=py35_0
@@ -97,4 +95,3 @@ dependencies:
   - werkzeug==0.12.2
   - yapf==0.16.2
 prefix: /Users/dkryuchkov/anaconda3/envs/kaggle-amazon-from-space
-
