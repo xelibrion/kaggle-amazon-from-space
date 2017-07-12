@@ -19,9 +19,6 @@ from keras.models import Model
 from keras.layers import Dense, Activation
 from keras import backend as K
 
-train_dir = '../input/train-jpg'
-model_batch_size = os.environ.get('MODEL_BATCH_SIZE', 64)
-
 
 def encode_labels(df):
     df.set_index('image_name', inplace=True)
@@ -88,6 +85,9 @@ def fbeta(y_true, y_pred, threshold_shift=0):
         beta_squared * precision + recall + K.epsilon())
 
 
+train_dir = '../input/train-jpg'
+model_batch_size = os.environ.get('MODEL_BATCH_SIZE', 4)
+
 df_train = pd.read_csv('../input/train_v2.csv')
 df_train['image_name'] = df_train['image_name'].apply(
     lambda x: os.path.join(train_dir, "%s.jpg" % x))
@@ -145,7 +145,7 @@ def lr_scheduler(epoch_idx):
 callbacks = [
     EarlyStopping(monitor='val_loss', patience=2, verbose=1),
     ModelCheckpoint(
-        './xelibrion_weights_tf-%d.h5',
+        './xelibrion_weights_tf-{epoch}.h5',
         monitor='val_loss',
         save_best_only=True),
     LearningRateScheduler(lr_scheduler),
