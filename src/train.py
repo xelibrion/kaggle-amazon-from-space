@@ -7,25 +7,20 @@ import pandas as pd
 import cv2
 import platform
 
-from tqdm import tqdm
 from sklearn.metrics import fbeta_score
 from sklearn.model_selection import train_test_split
 
 from keras.callbacks import (EarlyStopping, ModelCheckpoint,
                              LearningRateScheduler, TensorBoard, Callback)
+from keras.utils.data_utils import Sequence
 
 from keras import optimizers
 from keras.models import Model
 from keras.layers import Dense, Activation
-from keras.preprocessing.image import ImageDataGenerator
+from keras import backend as K
 
-train_dir = ('../input/train-jpg'
-             if platform.system() == 'Linux' else '../input/train-sample')
-model_batch_size = os.environ.get('MODEL_BATCH_SIZE', 256)
-
-
-def flatten(l):
-    return [item for sublist in l for item in sublist]
+train_dir = '../input/train-jpg'
+model_batch_size = os.environ.get('MODEL_BATCH_SIZE', 64)
 
 
 def encode_labels(df):
@@ -50,45 +45,73 @@ def encode_labels(df):
     return df_y
 
 
-x_train = []
-x_test = []
+class AmazonSequence(Sequence):
+    def __init__(self, x_set, y_df, batch_size, img_size=224):
+        self.X, self.y = x_set, y_df
+        self.batch_size = batch_size
+        self.img_size = img_size
+
+    def __len__(self):
+        return len(self.X) // self.batch_size
+
+    def __getitem__(self, idx):
+        batch_x = self.X[idx * self.batch_size:(idx + 1) * self.batch_size]
+        batch_y = self.y.loc[batch_x].values
+
+        img_size = (self.img_size, self.img_size)
+        batch_blob_x = [
+            cv2.resize(cv2.imread(file_name, -1), img_size)
+            for file_name in batch_x
+        ]
+
+        return np.array(batch_blob_x), np.array(batch_y)
+
+
+def fbeta(y_true, y_pred, threshold_shift=0):
+    beta = 2
+
+    # just in case of hipster activation at the final layer
+    y_pred = K.clip(y_pred, 0, 1)
+
+    # shifting the prediction threshold from .5 if needed
+    y_pred_bin = K.round(y_pred + threshold_shift)
+
+    tp = K.sum(K.round(y_true * y_pred_bin)) + K.epsilon()
+    fp = K.sum(K.round(K.clip(y_pred_bin - y_true, 0, 1)))
+    fn = K.sum(K.round(K.clip(y_true - y_pred, 0, 1)))
+
+    precision = tp / (tp + fp)
+    recall = tp / (tp + fn)
+
+    beta_squared = beta**2
+    return (beta_squared + 1) * (precision * recall) / (
+        beta_squared * precision + recall + K.epsilon())
+
 
 df_train = pd.read_csv('../input/train_v2.csv')
-df_test = pd.read_csv('../input/sample_submission_v2.csv')
-
-y_train = encode_labels(df_train)
+df_train['image_name'] = df_train['image_name'].apply(
+    lambda x: os.path.join(train_dir, "%s.jpg" % x))
+df_train.sort_values('image_name', inplace=True)
+y_train = encode_labels(df_train.copy())
 num_classes = y_train.shape[1]
-img_size = 224
-
-# print("Resizing test set")
-# for f, tags in tqdm(df_test.values, miniters=1000):
-#     img = cv2.imread('../input/test-tif-v2/{}.tif'.format(f), -1)
-#     x_test.append(cv2.resize(img, (img_size, img_size)))
-# x_test = np.array(x_test, np.float32) / 255.
-
-print("Resizing train set")
-for image_name, tags in tqdm(df_train.values, miniters=1000):
-    img_path = '{}/{}.jpg'.format(train_dir, image_name)
-    if not os.path.exists(img_path):
-        continue
-    # https://stackoverflow.com/questions/37512119/resize-transparent-image-in-opencv-python-cv2
-    # If you load a 4 channel image, the flag -1 indicates that the image
-    # is loaded unchanged, so you can load and split all 4 channels directly.
-    img = cv2.imread(img_path, -1)
-    x_train.append(cv2.resize(img, (img_size, img_size)))
-
-x_train = np.array(x_train, np.float32) / 255.
-
-print("x_train shape:")
-print(x_train.shape)
-print("y_train shape:")
-print(y_train.shape)
 
 X_train, X_val, Y_train, Y_val = train_test_split(
-    x_train, y_train, test_size=0.2)
+    df_train['image_name'].values,
+    y_train,
+    test_size=0.2, )
 
 print('Split train: ', len(X_train), len(Y_train))
 print('Split valid: ', len(X_val), len(Y_val))
+
+train_seq = AmazonSequence(
+    X_train,
+    Y_train,
+    model_batch_size, )
+
+val_seq = AmazonSequence(
+    X_val,
+    Y_val,
+    model_batch_size, )
 
 imagenet_weights = './densenet121_weights_tf.h5'
 
@@ -105,7 +128,7 @@ predictions = Activation('sigmoid', name='prob')(x)
 
 model = Model(inputs=base_model.input, outputs=predictions)
 opt = optimizers.Adam()
-model.compile(loss='binary_crossentropy', optimizer=opt, metrics=['accuracy'])
+model.compile(loss='binary_crossentropy', optimizer=opt, metrics=[fbeta])
 
 
 def lr_scheduler(epoch_idx):
@@ -119,22 +142,6 @@ def lr_scheduler(epoch_idx):
         return 0.001
 
 
-class Fbeta(Callback):
-    def on_train_begin(self, logs={}):
-        self.fbeta = []
-
-    def on_epoch_end(self, epoch, logs={}):
-        p_valid = self.model.predict(self.validation_data[0])
-        y_val = self.validation_data[1]
-        f_beta = fbeta_score(
-            y_val,
-            np.array(p_valid) > 0.5,
-            beta=2,
-            average='samples', )
-        self.fbeta.append(f_beta)
-        print("\nF-Beta: %.4f\n" % f_beta)
-
-
 callbacks = [
     EarlyStopping(monitor='val_loss', patience=2, verbose=1),
     ModelCheckpoint(
@@ -144,18 +151,19 @@ callbacks = [
     LearningRateScheduler(lr_scheduler),
     TensorBoard(
         log_dir='./logs',
-        histogram_freq=1, ),
-    Fbeta()
+        histogram_freq=1, )
 ]
 
 print("Starting training")
-model.fit(
-    x=X_train,
-    y=Y_train,
-    validation_data=(X_val, Y_val),
-    batch_size=model_batch_size,
-    verbose=1,
+model.fit_generator(
+    train_seq,
     epochs=60,
+    steps_per_epoch=len(train_seq),
+    validation_data=val_seq,
+    validation_steps=len(val_seq),
+    verbose=1,
     callbacks=callbacks,
-    shuffle=True)
+    max_queue_size=3 * model_batch_size,
+    use_multiprocessing=True,
+    workers=2, )
 print("Training complete\n")
