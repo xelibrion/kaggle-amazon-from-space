@@ -28,42 +28,36 @@ def flatten(l):
     return [item for sublist in l for item in sublist]
 
 
+def encode_labels(df):
+    df.set_index('image_name', inplace=True)
+    df_tag_cols = df['tags'].str.split(' ').apply(pd.Series).reset_index()
+    df_tag_melted = pd.melt(
+        df_tag_cols,
+        id_vars='image_name',
+        value_name='tag',
+        var_name='present', )
+    df_tag_melted['present'] = df_tag_melted['present'].astype(int)
+    df_tag_melted.loc[~pd.isnull(df_tag_melted['tag']), 'present'] = 1
+
+    df_y = pd.pivot_table(
+        df_tag_melted,
+        index='image_name',
+        columns='tag',
+        fill_value=0, )
+
+    df_y.columns = df_y.columns.droplevel(0)
+    df_y[df_y.columns] = df_y[df_y.columns].astype(np.uint8)
+    return df_y
+
+
 x_train = []
 x_test = []
-y_train = []
 
 df_train = pd.read_csv('../input/train_v2.csv')
 df_test = pd.read_csv('../input/sample_submission_v2.csv')
 
-labels = list(set(flatten([l.split(' ') for l in df_train['tags'].values])))
-
-labels = [
-    'blow_down', 'bare_ground', 'conventional_mine', 'blooming', 'cultivation',
-    'artisinal_mine', 'haze', 'primary', 'slash_burn', 'habitation', 'clear',
-    'road', 'selective_logging', 'partly_cloudy', 'agriculture', 'water',
-    'cloudy'
-]
-
-label_map = {
-    'agriculture': 14,
-    'artisinal_mine': 5,
-    'bare_ground': 1,
-    'blooming': 3,
-    'blow_down': 0,
-    'clear': 10,
-    'cloudy': 16,
-    'conventional_mine': 2,
-    'cultivation': 4,
-    'habitation': 9,
-    'haze': 6,
-    'partly_cloudy': 13,
-    'primary': 7,
-    'road': 11,
-    'selective_logging': 12,
-    'slash_burn': 8,
-    'water': 15
-}
-num_classes = len(labels)
+y_train = encode_labels(df_train)
+num_classes = y_train.shape[1]
 img_size = 224
 
 # print("Resizing test set")
@@ -73,20 +67,16 @@ img_size = 224
 # x_test = np.array(x_test, np.float32) / 255.
 
 print("Resizing train set")
-for f, tags in tqdm(df_train.values, miniters=1000):
-    img_path = '{}/{}.jpg'.format(train_dir, f)
+for image_name, tags in tqdm(df_train.values, miniters=1000):
+    img_path = '{}/{}.jpg'.format(train_dir, image_name)
     if not os.path.exists(img_path):
         continue
     # https://stackoverflow.com/questions/37512119/resize-transparent-image-in-opencv-python-cv2
     # If you load a 4 channel image, the flag -1 indicates that the image
     # is loaded unchanged, so you can load and split all 4 channels directly.
     img = cv2.imread(img_path, -1)
-    targets = np.zeros(17)
-    for t in tags.split(' '):
-        targets[label_map[t]] = 1
     x_train.append(cv2.resize(img, (img_size, img_size)))
-    y_train.append(targets)
-y_train = np.array(y_train, np.uint8)
+
 x_train = np.array(x_train, np.float32) / 255.
 
 print("x_train shape:")
@@ -154,14 +144,7 @@ callbacks = [
     LearningRateScheduler(lr_scheduler),
     TensorBoard(
         log_dir='./logs',
-        histogram_freq=1,
-        batch_size=32,
-        write_graph=True,
-        write_grads=False,
-        write_images=True,
-        embeddings_freq=0,
-        embeddings_layer_names=None,
-        embeddings_metadata=None),
+        histogram_freq=1, ),
     Fbeta()
 ]
 
