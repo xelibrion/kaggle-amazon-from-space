@@ -6,14 +6,16 @@ import cv2
 import numpy as np
 import pandas as pd
 from keras import backend as K, optimizers
+from keras.applications.imagenet_utils import preprocess_input
 from keras.applications.resnet50 import ResNet50
-from keras.callbacks import (EarlyStopping, LearningRateScheduler,
-                             ModelCheckpoint, TensorBoard)
-from keras.layers import Dense, Flatten, Conv2D
+from keras.callbacks import ModelCheckpoint, TensorBoard
+from keras.layers import Conv2D, Dense, Flatten
+from keras.layers.core import Activation
 from keras.models import Model
 from keras.utils.data_utils import Sequence
 from sklearn.model_selection import train_test_split
-from keras.applications.imagenet_utils import preprocess_input
+
+from densenet121 import DenseNet
 
 
 def encode_labels(df):
@@ -128,6 +130,26 @@ def get_model():
     predictions = Dense(num_classes, activation='sigmoid', name='fc_final')(x)
 
     return Model(inputs=base_model.input, outputs=predictions)
+
+
+def get_model_densenet():
+    imagenet_weights = './densenet121_weights_tf.h5'
+
+    base_model = DenseNet(reduction=0.5, classes=1000, weights_path=None)
+    base_model.layers.pop()
+    base_model.layers.pop()
+
+    trainable_threshold = [
+        idx for idx, l in enumerate(base_model.layers)
+        if isinstance(l, Conv2D)
+    ]
+    for l in base_model.layers[:trainable_threshold[-1] + 1]:
+        l.trainable = False
+
+    x = base_model.layers[-1].output
+    x = Dense(num_classes, activation='sigmoid', name='fc_final')(x)
+
+    return Model(inputs=base_model.input, outputs=x)
 
 
 model = get_model()
