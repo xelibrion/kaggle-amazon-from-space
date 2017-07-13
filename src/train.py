@@ -13,6 +13,7 @@ from keras.layers import Dense, Flatten
 from keras.models import Model
 from keras.utils.data_utils import Sequence
 from sklearn.model_selection import train_test_split
+from keras.applications.imagenet_utils import preprocess_input
 
 
 def encode_labels(df):
@@ -56,7 +57,8 @@ class AmazonSequence(Sequence):
             for file_name in batch_x
         ]
 
-        return np.array(batch_blob_x), np.array(batch_y)
+        return preprocess_input(
+            np.array(batch_blob_x, dtype=np.float32)), np.array(batch_y)
 
 
 def fbeta(y_true, y_pred, threshold_shift=0):
