@@ -1,23 +1,18 @@
 #!/usr/bin/env python
 
 import os
-from densenet121 import DenseNet
+
+import cv2
 import numpy as np
 import pandas as pd
-import cv2
-import platform
-
-from sklearn.metrics import fbeta_score
-from sklearn.model_selection import train_test_split
-
-from keras.callbacks import (EarlyStopping, ModelCheckpoint,
-                             LearningRateScheduler, TensorBoard, Callback)
-from keras.utils.data_utils import Sequence
-
-from keras import optimizers
+from keras import backend as K, optimizers
+from keras.applications.resnet50 import ResNet50
+from keras.callbacks import (EarlyStopping, LearningRateScheduler,
+                             ModelCheckpoint, TensorBoard)
+from keras.layers import Dense, Flatten
 from keras.models import Model
-from keras.layers import Dense, Activation
-from keras import backend as K
+from keras.utils.data_utils import Sequence
+from sklearn.model_selection import train_test_split
 
 
 def encode_labels(df):
@@ -86,9 +81,11 @@ def fbeta(y_true, y_pred, threshold_shift=0):
 
 
 train_dir = '../input/train-jpg'
-model_batch_size = os.environ.get('MODEL_BATCH_SIZE', 4)
+model_batch_size = int(os.environ.get('MODEL_BATCH_SIZE', 64))
+use_sample = os.environ.get('USE_SAMPLE', False)
 
 df_train = pd.read_csv('../input/train_v2.csv')
+df_train = df_train if not use_sample else df_train.head(32)
 df_train['image_name'] = df_train['image_name'].apply(
     lambda x: os.path.join(train_dir, "%s.jpg" % x))
 df_train.sort_values('image_name', inplace=True)
@@ -113,18 +110,16 @@ val_seq = AmazonSequence(
     Y_val,
     model_batch_size, )
 
-imagenet_weights = './densenet121_weights_tf.h5'
+# imagenet_weights = './densenet121_weights_tf.h5'
+# DenseNet(reduction=0.5, classes=1000, weights_path=imagenet_weights)
 
-base_model = DenseNet(
-    reduction=0.5, classes=1000, weights_path=imagenet_weights)
-base_model.layers.pop()
-base_model.layers.pop()
+base_model = ResNet50(include_top=False, input_shape=(224, 224, 3))
 for l in base_model.layers:
     l.trainable = False
 
 x = base_model.layers[-1].output
-x = Dense(num_classes, name='fc6')(x)
-predictions = Activation('sigmoid', name='prob')(x)
+x = Flatten()(x)
+predictions = Dense(num_classes, activation='sigmoid', name='fc_final')(x)
 
 model = Model(inputs=base_model.input, outputs=predictions)
 opt = optimizers.Adam()
