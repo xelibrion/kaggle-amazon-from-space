@@ -9,7 +9,7 @@ from keras import backend as K, optimizers
 from keras.applications.resnet50 import ResNet50
 from keras.callbacks import (EarlyStopping, LearningRateScheduler,
                              ModelCheckpoint, TensorBoard)
-from keras.layers import Dense, Flatten
+from keras.layers import Dense, Flatten, Conv2D
 from keras.models import Model
 from keras.utils.data_utils import Sequence
 from sklearn.model_selection import train_test_split
@@ -112,18 +112,25 @@ val_seq = AmazonSequence(
     Y_val,
     model_batch_size, )
 
-# imagenet_weights = './densenet121_weights_tf.h5'
-# DenseNet(reduction=0.5, classes=1000, weights_path=imagenet_weights)
 
-base_model = ResNet50(include_top=False, input_shape=(224, 224, 3))
-for l in base_model.layers:
-    l.trainable = False
+def get_model():
+    base_model = ResNet50(include_top=False, input_shape=(224, 224, 3))
 
-x = base_model.layers[-1].output
-x = Flatten()(x)
-predictions = Dense(num_classes, activation='sigmoid', name='fc_final')(x)
+    trainable_threshold = [
+        idx for idx, l in enumerate(base_model.layers)
+        if isinstance(l, Conv2D)
+    ]
+    for l in base_model.layers[:trainable_threshold[-1]]:
+        l.trainable = False
 
-model = Model(inputs=base_model.input, outputs=predictions)
+    x = base_model.layers[-1].output
+    x = Flatten()(x)
+    predictions = Dense(num_classes, activation='sigmoid', name='fc_final')(x)
+
+    return Model(inputs=base_model.input, outputs=predictions)
+
+
+model = get_model()
 # opt = optimizers.Adam()
 opt = optimizers.Nadam()
 model.compile(loss='binary_crossentropy', optimizer=opt, metrics=[fbeta])
@@ -142,7 +149,7 @@ def lr_scheduler(epoch_idx):
 
 
 callbacks = [
-    EarlyStopping(monitor='val_loss', patience=2, verbose=1),
+    # EarlyStopping(monitor='val_loss', patience=2, verbose=1),
     ModelCheckpoint(
         './xelibrion_weights_tf-{epoch}.h5',
         monitor='val_loss',
