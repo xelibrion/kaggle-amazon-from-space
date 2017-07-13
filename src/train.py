@@ -84,10 +84,10 @@ def fbeta(y_true, y_pred, threshold_shift=0):
 
 train_dir = '../input/train-jpg'
 model_batch_size = int(os.environ.get('MODEL_BATCH_SIZE', 64))
-use_sample = os.environ.get('USE_SAMPLE', False)
+sample_size = int(os.environ.get('SAMPLE_SIZE', 0))
 
 df_train = pd.read_csv('../input/train_v2.csv')
-df_train = df_train if not use_sample else df_train.head(32)
+df_train = df_train if not sample_size else df_train.sample(sample_size)
 df_train['image_name'] = df_train['image_name'].apply(
     lambda x: os.path.join(train_dir, "%s.jpg" % x))
 df_train.sort_values('image_name', inplace=True)
@@ -124,19 +124,21 @@ x = Flatten()(x)
 predictions = Dense(num_classes, activation='sigmoid', name='fc_final')(x)
 
 model = Model(inputs=base_model.input, outputs=predictions)
-opt = optimizers.Adam()
+# opt = optimizers.Adam()
+opt = optimizers.Nadam()
 model.compile(loss='binary_crossentropy', optimizer=opt, metrics=[fbeta])
 
 
 def lr_scheduler(epoch_idx):
-    if epoch_idx == 0:
-        return 0.003
+    return 0.03
+    # if epoch_idx == 0:
+    #     return 0.03
 
-    if epoch_idx < 10:
-        return 0.01
+    # if epoch_idx < 10:
+    #     return 0.01
 
-    if epoch_idx > 10:
-        return 0.001
+    # if epoch_idx > 10:
+    #     return 0.001
 
 
 callbacks = [
@@ -145,7 +147,7 @@ callbacks = [
         './xelibrion_weights_tf-{epoch}.h5',
         monitor='val_loss',
         save_best_only=True),
-    LearningRateScheduler(lr_scheduler),
+    # LearningRateScheduler(lr_scheduler),
     TensorBoard(
         log_dir='./logs',
         histogram_freq=1, )
