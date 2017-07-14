@@ -11,7 +11,7 @@ from keras.applications.resnet50 import ResNet50
 from keras.applications.vgg16 import VGG16
 from keras.callbacks import ModelCheckpoint, TensorBoard
 from keras.layers import Conv2D, Dense, Flatten
-from keras.layers.core import Activation
+from keras.layers.core import Dropout
 from keras.models import Model
 from keras.utils.data_utils import Sequence
 from sklearn.model_selection import train_test_split
@@ -141,7 +141,11 @@ def get_model_resnet50(num_classes):
 
     x = base_model.layers[-1].output
     x = Flatten()(x)
-    x = Dense(128, activation='relu', name='fc1')(x)
+    x = Dense(512, activation='relu', name='fc1')(x)
+    x = Dropout(0.2, name='drop_fc1')(x)
+    x = Dense(1024, activation='relu', name='fc2')(x)
+    x = Dropout(0.2, name='drop_fc2')(x)
+
     predictions = Dense(
         num_classes,
         activation='sigmoid',
