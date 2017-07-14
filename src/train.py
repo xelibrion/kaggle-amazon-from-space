@@ -8,6 +8,7 @@ import pandas as pd
 from keras import backend as K, optimizers
 from keras.applications.imagenet_utils import preprocess_input
 from keras.applications.resnet50 import ResNet50
+from keras.applications.vgg16 import VGG16
 from keras.callbacks import ModelCheckpoint, TensorBoard
 from keras.layers import Conv2D, Dense, Flatten
 from keras.layers.core import Activation
@@ -115,27 +116,47 @@ val_seq = AmazonSequence(
     model_batch_size, )
 
 
-def get_model():
-    base_model = ResNet50(include_top=False, input_shape=(224, 224, 3))
+def get_model_vgg(num_classes):
+    base_model = VGG16(include_top=False, input_shape=(224, 224, 3))
 
-    trainable_threshold = [
-        idx for idx, l in enumerate(base_model.layers)
-        if isinstance(l, Conv2D)
-    ]
-    for l in base_model.layers[:trainable_threshold[-1]]:
+    for l in base_model.layers:
         l.trainable = False
 
     x = base_model.layers[-1].output
     x = Flatten()(x)
-    predictions = Dense(num_classes, activation='sigmoid', name='fc_final')(x)
+    x = Dense(128, activation='relu', name='fc1')(x)
+    predictions = Dense(
+        num_classes,
+        activation='sigmoid',
+        name='predictions', )(x)
 
     return Model(inputs=base_model.input, outputs=predictions)
 
 
-def get_model_densenet():
+def get_model_resnet50(num_classes):
+    base_model = ResNet50(include_top=False, input_shape=(224, 224, 3))
+
+    for l in base_model.layers:
+        l.trainable = False
+
+    x = base_model.layers[-1].output
+    x = Flatten()(x)
+    x = Dense(128, activation='relu', name='fc1')(x)
+    predictions = Dense(
+        num_classes,
+        activation='sigmoid',
+        name='predictions', )(x)
+
+    return Model(inputs=base_model.input, outputs=predictions)
+
+
+def get_model_densenet(num_classes):
     imagenet_weights = './densenet121_weights_tf.h5'
 
-    base_model = DenseNet(reduction=0.5, classes=1000, weights_path=None)
+    base_model = DenseNet(
+        reduction=0.5,
+        classes=1000,
+        weights_path=imagenet_weights, )
     base_model.layers.pop()
     base_model.layers.pop()
 
@@ -152,7 +173,8 @@ def get_model_densenet():
     return Model(inputs=base_model.input, outputs=x)
 
 
-model = get_model()
+# model = get_model_densenet(num_classes)
+model = get_model_resnet50(num_classes)
 # opt = optimizers.Adam()
 opt = optimizers.Nadam()
 model.compile(loss='binary_crossentropy', optimizer=opt, metrics=[fbeta])
