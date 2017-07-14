@@ -19,6 +19,21 @@ from sklearn.model_selection import train_test_split
 from densenet121 import DenseNet
 
 
+def get_x_y():
+    sample_size = int(os.environ.get('SAMPLE_SIZE', 0))
+
+    img_train_dir = '../input/train-jpg'
+
+    df_train = pd.read_csv('../input/train_v2.csv')
+    df_train = df_train if not sample_size else df_train.sample(sample_size)
+    df_train['image_name'] = df_train['image_name'].apply(
+        lambda x: os.path.join(img_train_dir, "%s.jpg" % x))
+    df_train.sort_values('image_name', inplace=True)
+    y_train = encode_labels(df_train.copy())
+
+    return df_train['image_name'].values, y_train.values
+
+
 def encode_labels(df):
     df.set_index('image_name', inplace=True)
     df_tag_cols = df['tags'].str.split(' ').apply(pd.Series).reset_index()
@@ -51,8 +66,9 @@ class AmazonSequence(Sequence):
         return len(self.X) // self.batch_size
 
     def __getitem__(self, idx):
-        batch_x = self.X[idx * self.batch_size:(idx + 1) * self.batch_size]
-        batch_y = self.y.loc[batch_x].values
+        slc = slice(idx * self.batch_size, (idx + 1) * self.batch_size)
+        batch_x = self.X[slc]
+        batch_y = self.y[slc]
 
         img_size = (self.img_size, self.img_size)
         batch_blob_x = [
@@ -83,37 +99,6 @@ def fbeta(y_true, y_pred, threshold_shift=0):
     beta_squared = beta**2
     return (beta_squared + 1) * (precision * recall) / (
         beta_squared * precision + recall + K.epsilon())
-
-
-train_dir = '../input/train-jpg'
-model_batch_size = int(os.environ.get('MODEL_BATCH_SIZE', 64))
-sample_size = int(os.environ.get('SAMPLE_SIZE', 0))
-
-df_train = pd.read_csv('../input/train_v2.csv')
-df_train = df_train if not sample_size else df_train.sample(sample_size)
-df_train['image_name'] = df_train['image_name'].apply(
-    lambda x: os.path.join(train_dir, "%s.jpg" % x))
-df_train.sort_values('image_name', inplace=True)
-y_train = encode_labels(df_train.copy())
-num_classes = y_train.shape[1]
-
-X_train, X_val, Y_train, Y_val = train_test_split(
-    df_train['image_name'].values,
-    y_train,
-    test_size=0.2, )
-
-print('Split train: ', len(X_train), len(Y_train))
-print('Split valid: ', len(X_val), len(Y_val))
-
-train_seq = AmazonSequence(
-    X_train,
-    Y_train,
-    model_batch_size, )
-
-val_seq = AmazonSequence(
-    X_val,
-    Y_val,
-    model_batch_size, )
 
 
 def get_model_vgg(num_classes):
@@ -177,13 +162,6 @@ def get_model_densenet(num_classes):
     return Model(inputs=base_model.input, outputs=x)
 
 
-# model = get_model_densenet(num_classes)
-model = get_model_resnet50(num_classes)
-# opt = optimizers.Adam()
-opt = optimizers.Nadam()
-model.compile(loss='binary_crossentropy', optimizer=opt, metrics=[fbeta])
-
-
 def lr_scheduler(epoch_idx):
     return 0.03
     # if epoch_idx == 0:
@@ -196,28 +174,59 @@ def lr_scheduler(epoch_idx):
     #     return 0.001
 
 
-callbacks = [
-    # EarlyStopping(monitor='val_loss', patience=2, verbose=1),
-    ModelCheckpoint(
-        './xelibrion_weights_tf-{epoch}.h5',
-        monitor='val_loss',
-        save_best_only=True),
-    # LearningRateScheduler(lr_scheduler),
-    TensorBoard(
-        log_dir='./logs',
-        histogram_freq=1, )
-]
+def main():
 
-print("Starting training")
-model.fit_generator(
-    train_seq,
-    epochs=60,
-    steps_per_epoch=len(train_seq),
-    validation_data=val_seq,
-    validation_steps=len(val_seq),
-    verbose=1,
-    callbacks=callbacks,
-    max_queue_size=3 * model_batch_size,
-    use_multiprocessing=True,
-    workers=2, )
-print("Training complete\n")
+    model_batch_size = int(os.environ.get('MODEL_BATCH_SIZE', 64))
+
+    X, y = get_x_y()
+    X_train, X_val, Y_train, Y_val = train_test_split(X, y, test_size=0.2)
+    num_classes = y.shape[1]
+
+    print('Split train: ', len(X_train), len(Y_train))
+    print('Split valid: ', len(X_val), len(Y_val))
+
+    train_seq = AmazonSequence(
+        X_train,
+        Y_train,
+        model_batch_size, )
+
+    val_seq = AmazonSequence(
+        X_val,
+        Y_val,
+        model_batch_size, )
+
+    # model = get_model_densenet(num_classes)
+    model = get_model_resnet50(num_classes)
+    # opt = optimizers.Adam()
+    opt = optimizers.Nadam()
+    model.compile(loss='binary_crossentropy', optimizer=opt, metrics=[fbeta])
+
+    callbacks = [
+        # EarlyStopping(monitor='val_loss', patience=2, verbose=1),
+        ModelCheckpoint(
+            './xelibrion_weights_tf-{epoch}.h5',
+            monitor='val_loss',
+            save_best_only=True),
+        # LearningRateScheduler(lr_scheduler),
+        TensorBoard(
+            log_dir='./logs',
+            histogram_freq=1, )
+    ]
+
+    print("Starting training")
+    model.fit_generator(
+        train_seq,
+        epochs=60,
+        steps_per_epoch=len(train_seq),
+        validation_data=val_seq,
+        validation_steps=len(val_seq),
+        verbose=1,
+        callbacks=callbacks,
+        max_queue_size=3 * model_batch_size,
+        use_multiprocessing=True,
+        workers=2, )
+    print("Training complete\n")
+
+
+if __name__ == '__main__':
+    main()
