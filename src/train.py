@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import functools
 import os
 
 import cv2
@@ -16,6 +17,7 @@ from keras.models import Model
 from keras.utils.data_utils import Sequence
 from sklearn.model_selection import train_test_split
 
+from augment import expand_versions
 from densenet121 import DenseNet
 
 
@@ -54,6 +56,31 @@ def encode_labels(df):
     df_y.columns = df_y.columns.droplevel(0)
     df_y[df_y.columns] = df_y[df_y.columns].astype(np.uint8)
     return df_y
+
+
+class AmazonTrainSequence(Sequence):
+    def __init__(self, x_set, y_set, batch_size):
+        self.X, self.y = x_set, y_set
+        self.batch_size = batch_size
+
+    def __len__(self):
+        return len(self.X) // self.batch_size
+
+    def __getitem__(self, idx):
+        slc = slice(idx * self.batch_size, (idx + 1) * self.batch_size)
+        batch_x = self.X[slc]
+        batch_y = self.y[slc]
+
+        raw_images = [cv2.imread(file_name, -1) for file_name in batch_x]
+        aug_images = [expand_versions(x) for x in raw_images]
+        batch_blob_x = np.array(
+            functools.reduce(list.__add__, aug_images),
+            dtype=np.float32, )
+
+        repeat_count = batch_blob_x.shape[0] // len(raw_images)
+        batch_y = np.repeat(batch_y, repeat_count, axis=0)
+
+        return preprocess_input(batch_blob_x), np.array(batch_y)
 
 
 class AmazonSequence(Sequence):
@@ -126,9 +153,9 @@ def get_model_resnet50(num_classes):
 
     x = base_model.layers[-1].output
     x = Flatten()(x)
-    x = Dense(512, activation='relu', name='fc1')(x)
+    x = Dense(2048, activation='relu', name='fc1')(x)
     x = Dropout(0.2, name='drop_fc1')(x)
-    x = Dense(1024, activation='relu', name='fc2')(x)
+    x = Dense(2048, activation='relu', name='fc2')(x)
     x = Dropout(0.2, name='drop_fc2')(x)
 
     predictions = Dense(
@@ -185,10 +212,10 @@ def main():
     print('Split train: ', len(X_train), len(Y_train))
     print('Split valid: ', len(X_val), len(Y_val))
 
-    train_seq = AmazonSequence(
+    train_seq = AmazonTrainSequence(
         X_train,
         Y_train,
-        model_batch_size, )
+        6, )
 
     val_seq = AmazonSequence(
         X_val,
@@ -222,7 +249,7 @@ def main():
         validation_steps=len(val_seq),
         verbose=1,
         callbacks=callbacks,
-        max_queue_size=3 * model_batch_size,
+        max_queue_size=100,
         use_multiprocessing=True,
         workers=2, )
     print("Training complete\n")
