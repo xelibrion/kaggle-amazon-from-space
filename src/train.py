@@ -18,6 +18,7 @@ from keras.utils.data_utils import Sequence
 from sklearn.model_selection import train_test_split
 
 from augment import expand_versions
+from imgaug import augmenters as iaa
 from densenet121 import DenseNet
 
 
@@ -83,11 +84,10 @@ class AmazonTrainSequence(Sequence):
         return preprocess_input(batch_blob_x), np.array(batch_y)
 
 
-class AmazonSequence(Sequence):
-    def __init__(self, x_set, y_df, batch_size, img_size=224):
+class AmazonTestSequence(Sequence):
+    def __init__(self, x_set, y_df, batch_size):
         self.X, self.y = x_set, y_df
         self.batch_size = batch_size
-        self.img_size = img_size
 
     def __len__(self):
         return len(self.X) // self.batch_size
@@ -97,11 +97,10 @@ class AmazonSequence(Sequence):
         batch_x = self.X[slc]
         batch_y = self.y[slc]
 
-        img_size = (self.img_size, self.img_size)
-        batch_blob_x = [
-            cv2.resize(cv2.imread(file_name, -1), img_size)
-            for file_name in batch_x
-        ]
+        batch_raw_x = [cv2.imread(file_name, -1) for file_name in batch_x]
+
+        scissors = iaa.Crop(px=(16, 16, 16, 16), keep_size=False)
+        batch_blob_x = [scissors.augment_image(x) for x in batch_raw_x]
 
         return preprocess_input(
             np.array(batch_blob_x, dtype=np.float32)), np.array(batch_y)
@@ -217,7 +216,7 @@ def main():
         Y_train,
         6, )
 
-    val_seq = AmazonSequence(
+    val_seq = AmazonTestSequence(
         X_val,
         Y_val,
         model_batch_size, )
