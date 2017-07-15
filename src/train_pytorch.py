@@ -149,9 +149,15 @@ def get_x_y():
     sample_size = int(os.environ.get('SAMPLE_SIZE', 0))
 
     df_train = pd.read_csv('../input/train_v2.csv')
-    df_train = df_train if not sample_size else df_train.sample(sample_size)
     df_train.sort_values('image_name', inplace=True)
     y_train = encode_labels(df_train.copy())
+
+    if sample_size:
+        x_t, _, y_t, _ = train_test_split(
+            df_train['image_name'].values,
+            y_train.values,
+            train_size=sample_size)
+        return x_t, y_t
 
     return df_train['image_name'].values, y_train.values
 
@@ -240,7 +246,6 @@ def main():
         best_prec1 = max(prec1, best_prec1)
         save_checkpoint({
             'epoch': epoch + 1,
-            'arch': args.arch,
             'state_dict': model.state_dict(),
             'best_prec1': best_prec1,
             'optimizer': optimizer.state_dict(),
