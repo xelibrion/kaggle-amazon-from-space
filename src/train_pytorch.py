@@ -265,8 +265,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
-    top1 = AverageMeter()
-    top5 = AverageMeter()
+    f2_meter = AverageMeter()
 
     # switch to train mode
     model.train()
@@ -289,9 +288,9 @@ def train(train_loader, model, criterion, optimizer, epoch):
         loss = criterion(output, target_var)
 
         # measure accuracy and record loss
-        # prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
         losses.update(loss.data[0], input.size(0))
-        # top1.update(prec1[0], input.size(0))
+        f2_score = fbeta_score(target, output.data)
+        f2_meter.update(f2_score, input.size(0))
         # top5.update(prec5[0], input.size(0))
 
         # compute gradient and do SGD step
@@ -308,23 +307,20 @@ def train(train_loader, model, criterion, optimizer, epoch):
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
-                  'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
+                  'F2-score {f2_score.val:.3f} ({f2_score.avg:.3f})'.format(
                       epoch,
                       i,
                       len(train_loader),
                       batch_time=batch_time,
                       data_time=data_time,
                       loss=losses,
-                      top1=top1,
-                      top5=top5))
+                      f2_score=f2_meter))
 
 
 def validate(val_loader, model, criterion):
     batch_time = AverageMeter()
     losses = AverageMeter()
-    top1 = AverageMeter()
-    top5 = AverageMeter()
+    f2_meter = AverageMeter()
 
     # switch to evaluate mode
     model.eval()
@@ -343,10 +339,9 @@ def validate(val_loader, model, criterion):
         loss = criterion(output, target_var)
 
         # measure accuracy and record loss
-        # prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
         losses.update(loss.data[0], input.size(0))
-        # top1.update(prec1[0], input.size(0))
-        # top5.update(prec5[0], input.size(0))
+        f2_score = fbeta_score(target, output.data)
+        f2_meter.update(f2_score, input.size(0))
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -356,19 +351,16 @@ def validate(val_loader, model, criterion):
             print('Test: [{0}/{1}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
-                  'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
+                  'F2-score {f2_score.val:.3f} ({f2_score.avg:.3f})'.format(
                       i,
                       len(val_loader),
                       batch_time=batch_time,
                       loss=losses,
-                      top1=top1,
-                      top5=top5))
+                      f2_score=f2_meter, ))
 
-    print(' * Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f}'
-          .format(top1=top1, top5=top5))
+    print(' * F2-score {f2_score.avg:.3f}'.format(f2_score=f2_meter))
 
-    return top1.avg
+    return f2_meter.avg
 
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
@@ -418,6 +410,21 @@ def accuracy(output, target, topk=(1, )):
         correct_k = correct[:k].view(-1).float().sum(0)
         res.append(correct_k.mul_(100.0 / batch_size))
     return res
+
+
+def fbeta_score(y_true, y_pred, beta=2, threshold=0.5, eps=1e-9):
+    beta2 = beta**2
+
+    y_pred = torch.ge(y_pred.float(), threshold).float()
+    y_true = y_true.float()
+
+    true_positive = (y_pred * y_true).sum(dim=1)
+    precision = true_positive.div(y_pred.sum(dim=1).add(eps))
+    recall = true_positive.div(y_true.sum(dim=1).add(eps))
+
+    return torch.mean(
+        (precision *
+         recall).div(precision.mul(beta2) + recall + eps).mul(1 + beta2))
 
 
 if __name__ == '__main__':
