@@ -20,7 +20,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MultiLabelBinarizer
 from torch.utils.data import Dataset
 
-import torchvision.models as models
+from torchvision import models
 import torchvision.transforms as transforms
 
 parser = argparse.ArgumentParser(description='Kaggle Amazon from Space')
@@ -93,26 +93,44 @@ parser.add_argument(
 best_fbeta = 0
 
 
+class FineTuneModel(nn.Module):
+    def __init__(self, num_classes):
+        super(FineTuneModel, self).__init__()
+
+        base_model = models.resnet50(pretrained=True)
+
+        self.features = nn.Sequential(*list(base_model.children())[:-1])
+        self.classifier = nn.Sequential(
+            nn.Linear(2048, 4096),
+            nn.ReLU(inplace=True),
+            nn.Linear(4096, 4096),
+            nn.ReLU(inplace=True),
+            nn.Linear(4096, 4096),
+            nn.ReLU(inplace=True),
+            nn.Linear(4096, 4096),
+            nn.ReLU(inplace=True),
+            nn.Linear(4096, num_classes), )
+
+        # Freeze those weights
+        for p in self.features.parameters():
+            p.requires_grad = False
+
+    def forward(self, x):
+        f = self.features(x)
+        f = f.view(f.size(0), -1)
+        y = self.classifier(f)
+        return y
+
+
 def create_model(num_classes):
     # create model
     print("=> using pre-trained model resnet50")
-    model = models.resnet50(pretrained=True)
-    # model = torch.nn.DataParallel(model).cpu()
+    model = models.resnet50(pretrained=True).cuda()
 
-    for param in model.parameters():
-        param.requires_grad = False
-    # Replace the last fully-connected layer
-    # Parameters of newly constructed modules
-    # have requires_grad=True by default
-    model.fc = nn.Sequential(
-        nn.Linear(2048, 2048),
-        nn.ReLU(),
-        nn.Dropout(0.2),
-        nn.Linear(2048, 2048),
-        nn.ReLU(),
-        nn.Dropout(),
-        nn.Linear(2048, num_classes),
-        nn.Sigmoid(), )
+    # for param in model.parameters():
+    #     param.requires_grad = False
+
+    model.fc = nn.Linear(2048, num_classes).cuda()
 
     return model
 
@@ -147,23 +165,23 @@ labels = [
 ]
 
 label_weights = {
-    'agriculture': 0.10597650703498128,
-    'artisinal_mine': 0.0029172582935329803,
-    'bare_ground': 0.0074179252183640982,
-    'blooming': 0.0028570199216901167,
-    'blow_down': 0.00084333720580009462,
-    'clear': 0.24466244998063766,
-    'cloudy': 0.017976851254248957,
-    'conventional_mine': 0.00086054816918377001,
-    'cultivation': 0.038526741534357388,
-    'habitation': 0.031496062992125984,
-    'haze': 0.023208984122886279,
-    'partly_cloudy': 0.062484402564433543,
-    'primary': 0.32281743470590768,
-    'road': 0.069454842734822081,
-    'selective_logging': 0.0029258637752248183,
-    'slash_burn': 0.0017985456735940795,
-    'water': 0.0637752248182092
+    'agriculture': 3.0461226146975235,
+    'artisinal_mine': 110.65781710914455,
+    'bare_ground': 43.518561484918791,
+    'blooming': 112.9909638554217,
+    'blow_down': 382.78571428571428,
+    'clear': 1.3194400478351096,
+    'cloudy': 17.957395883197702,
+    'conventional_mine': 375.13000000000005,
+    'cultivation': 8.37904846995756,
+    'habitation': 10.249453551912568,
+    'haze': 13.909158324063775,
+    'partly_cloudy': 5.1663682688334944,
+    'primary': 1.0,
+    'road': 4.647875108412836,
+    'selective_logging': 110.33235294117647,
+    'slash_burn': 179.48803827751198,
+    'water': 5.0618000269869121
 }
 
 label_weights_arr = [
@@ -199,15 +217,17 @@ def main():
     args = parser.parse_args()
 
     model = create_model(17)
-    if args.use_gpu:
-        # model = torch.nn.DataParallel(model).cuda()
-        model = model.cuda()
+    # model = FineTuneModel(17)
+    # if args.use_gpu:
+    #     # model = torch.nn.DataParallel(model).cuda()
+    #     model = model.cuda()
     # define loss function (criterion) and optimizer
 
-    criterion = nn.BCEWithLogitsLoss()
+    # criterion = nn.BCEWithLogitsLoss()
+    criterion = nn.MultiLabelSoftMarginLoss()
     criterion = criterion.cuda() if args.use_gpu else criterion.cpu()
     # criterion = nn.CrossEntropyLoss().cpu()
-    optimizer = torch.optim.Adam(model.fc.parameters(), args.lr)
+    optimizer = torch.optim.Adam(model.parameters(), args.lr)
 
     # optionally resume from a checkpoint
     if args.resume:
@@ -237,10 +257,10 @@ def main():
             Y_train,
             root_dir=args.train_dir,
             transform=transforms.Compose([
-                transforms.RandomCrop(224),
-                transforms.RandomHorizontalFlip(),
+                transforms.Scale(224),
+                # transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
-                normalize,
+                # normalize,
             ])),
         batch_size=args.batch_size,
         shuffle=True,
@@ -253,9 +273,9 @@ def main():
             Y_val,
             root_dir=args.train_dir,
             transform=transforms.Compose([
-                transforms.CenterCrop(224),
+                transforms.Scale(224),
                 transforms.ToTensor(),
-                normalize,
+                # normalize,
             ])),
         batch_size=args.batch_size,
         shuffle=False,
@@ -461,14 +481,18 @@ def fbeta_score(y_true, y_pred, beta=2, threshold=0.5, eps=1e-9):
 
 
 class BinaryCrossEntropyLoss(nn.Module):
-    def __init__(self, weight=None, size_average=True):
+    def __init__(self, weight=None, size_average=False):
         super(BinaryCrossEntropyLoss, self).__init__()
         self.size_average = size_average
         self.register_buffer('weight', weight)
 
     def forward(self, input, target):
-        return F.binary_cross_entropy(
-            input, target, self.weight, size_average=self.size_average)
+        print(self.weight)
+        return F.binary_cross_entropy_with_logits(
+            input,
+            target,
+            self.weight,
+            size_average=self.size_average, )
 
 
 if __name__ == '__main__':
