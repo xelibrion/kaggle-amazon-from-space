@@ -177,8 +177,8 @@ def main():
         model = model.cuda()
     # define loss function (criterion) and optimizer
 
-    criterion = (nn.BCEWithLogitsLoss().cuda()
-                 if args.use_gpu else nn.BCEWithLogitsLoss().cpu())
+    criterion = (nn.MultiLabelSoftMarginLoss().cuda()
+                 if args.use_gpu else nn.MultiLabelSoftMarginLoss().cpu())
     # criterion = nn.CrossEntropyLoss().cpu()
     optimizer = torch.optim.Adam(model.fc.parameters(), args.lr)
 
