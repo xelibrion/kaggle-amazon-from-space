@@ -8,6 +8,7 @@ import time
 import numpy as np
 import torch.backends.cudnn as cudnn
 import torch.nn as nn
+import torch.nn.functional as F
 import pandas as pd
 import torch
 import torch.nn.parallel
@@ -87,7 +88,7 @@ parser.add_argument(
     action='store_true',
     help='evaluate model on validation set')
 
-best_prec1 = 0
+best_fbeta = 0
 
 
 def create_model(num_classes):
@@ -102,6 +103,12 @@ def create_model(num_classes):
     # Parameters of newly constructed modules
     # have requires_grad=True by default
     model.fc = nn.Sequential(
+        nn.Linear(2048, 2048),
+        nn.ReLU(),
+        nn.Dropout(0.2),
+        nn.Linear(2048, 2048),
+        nn.ReLU(),
+        nn.Dropout(),
         nn.Linear(2048, num_classes),
         nn.Sigmoid(), )
 
@@ -170,7 +177,7 @@ def get_x_y():
 
 
 def main():
-    global args, best_prec1
+    global args, best_fbeta
     args = parser.parse_args()
 
     model = create_model(17)
@@ -179,8 +186,8 @@ def main():
         model = model.cuda()
     # define loss function (criterion) and optimizer
 
-    criterion = (nn.MultiLabelSoftMarginLoss().cuda()
-                 if args.use_gpu else nn.MultiLabelSoftMarginLoss().cpu())
+    criterion = (BinaryCrossEntropyLoss().cuda()
+                 if args.use_gpu else BinaryCrossEntropyLoss().cpu())
     # criterion = nn.CrossEntropyLoss().cpu()
     optimizer = torch.optim.Adam(model.fc.parameters(), args.lr)
 
@@ -190,7 +197,7 @@ def main():
             print("=> loading checkpoint '{}'".format(args.resume))
             checkpoint = torch.load(args.resume)
             args.start_epoch = checkpoint['epoch']
-            best_prec1 = checkpoint['best_prec1']
+            best_fbeta = checkpoint['best_fbeta']
             model.load_state_dict(checkpoint['state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer'])
             print("=> loaded checkpoint '{}' (epoch {})"
@@ -203,9 +210,7 @@ def main():
     X, Y = get_x_y()
     X_train, X_val, Y_train, Y_val = train_test_split(X, Y, test_size=0.2)
 
-    normalize = transforms.Normalize(
-        mean=[0.485, 0.456, 0.406],
-        std=[0.229, 0.224, 0.225], )
+    normalize = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
 
     train_loader = torch.utils.data.DataLoader(
         KaggleAmazonDataset(
@@ -229,7 +234,6 @@ def main():
             Y_val,
             root_dir=args.train_dir,
             transform=transforms.Compose([
-                transforms.Scale(256),
                 transforms.CenterCrop(224),
                 transforms.ToTensor(),
                 normalize,
@@ -250,15 +254,15 @@ def main():
         train(train_loader, model, criterion, optimizer, epoch)
 
         # evaluate on validation set
-        prec1 = validate(val_loader, model, criterion)
+        fbeta = validate(val_loader, model, criterion)
 
         # remember best prec@1 and save checkpoint
-        is_best = prec1 > best_prec1
-        best_prec1 = max(prec1, best_prec1)
+        is_best = fbeta > best_fbeta
+        best_fbeta = max(fbeta, best_fbeta)
         save_checkpoint({
             'epoch': epoch + 1,
             'state_dict': model.state_dict(),
-            'best_prec1': best_prec1,
+            'best_fbeta': best_fbeta,
             'optimizer': optimizer.state_dict(),
         }, is_best)
 
@@ -427,6 +431,17 @@ def fbeta_score(y_true, y_pred, beta=2, threshold=0.5, eps=1e-9):
     return torch.mean(
         (precision *
          recall).div(precision.mul(beta2) + recall + eps).mul(1 + beta2))
+
+
+class BinaryCrossEntropyLoss(nn.Module):
+    def __init__(self, weight=None, size_average=True):
+        super(BinaryCrossEntropyLoss, self).__init__()
+        self.size_average = size_average
+        self.register_buffer('weight', weight)
+
+    def forward(self, input, target):
+        return F.binary_cross_entropy(
+            input, target, size_average=self.size_average)
 
 
 if __name__ == '__main__':
