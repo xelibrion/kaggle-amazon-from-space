@@ -146,6 +146,30 @@ labels = [
     'slash_burn', 'water'
 ]
 
+label_weights = {
+    'agriculture': 0.10597650703498128,
+    'artisinal_mine': 0.0029172582935329803,
+    'bare_ground': 0.0074179252183640982,
+    'blooming': 0.0028570199216901167,
+    'blow_down': 0.00084333720580009462,
+    'clear': 0.24466244998063766,
+    'cloudy': 0.017976851254248957,
+    'conventional_mine': 0.00086054816918377001,
+    'cultivation': 0.038526741534357388,
+    'habitation': 0.031496062992125984,
+    'haze': 0.023208984122886279,
+    'partly_cloudy': 0.062484402564433543,
+    'primary': 0.32281743470590768,
+    'road': 0.069454842734822081,
+    'selective_logging': 0.0029258637752248183,
+    'slash_burn': 0.0017985456735940795,
+    'water': 0.0637752248182092
+}
+
+label_weights_arr = [
+    label_weights[key] for key in sorted(label_weights.keys())
+]
+
 
 def encode_labels(df):
     tags = df['tags'].apply(lambda x: x.split(' ')).values
@@ -180,8 +204,10 @@ def main():
         model = model.cuda()
     # define loss function (criterion) and optimizer
 
-    criterion = (BinaryCrossEntropyLoss().cuda()
-                 if args.use_gpu else BinaryCrossEntropyLoss().cpu())
+    criterion = BinaryCrossEntropyLoss(
+        weight=torch.from_numpy(np.array(label_weights_arr, dtype='float32')),
+    )
+    criterion = criterion.cuda() if args.use_gpu else criterion.cpu()
     # criterion = nn.CrossEntropyLoss().cpu()
     optimizer = torch.optim.Adam(model.fc.parameters(), args.lr)
 
@@ -435,7 +461,7 @@ class BinaryCrossEntropyLoss(nn.Module):
 
     def forward(self, input, target):
         return F.binary_cross_entropy(
-            input, target, size_average=self.size_average)
+            input, target, self.weight, size_average=self.size_average)
 
 
 if __name__ == '__main__':
