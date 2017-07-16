@@ -204,9 +204,7 @@ def main():
         model = model.cuda()
     # define loss function (criterion) and optimizer
 
-    criterion = BinaryCrossEntropyLoss(
-        weight=torch.from_numpy(np.array(label_weights_arr, dtype='float32')),
-    )
+    criterion = nn.BCEWithLogitsLoss()
     criterion = criterion.cuda() if args.use_gpu else criterion.cpu()
     # criterion = nn.CrossEntropyLoss().cpu()
     optimizer = torch.optim.Adam(model.fc.parameters(), args.lr)
@@ -230,7 +228,8 @@ def main():
     X, Y = get_x_y()
     X_train, X_val, Y_train, Y_val = train_test_split(X, Y, test_size=0.2)
 
-    normalize = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+    normalize = transforms.Normalize((0.302751, 0.344464, 0.315358),
+                                     (0.127995, 0.132469, 0.152108))
 
     train_loader = torch.utils.data.DataLoader(
         KaggleAmazonDataset(
@@ -449,7 +448,7 @@ def accuracy(output, target, topk=(1, )):
 def fbeta_score(y_true, y_pred, beta=2, threshold=0.5, eps=1e-9):
     beta2 = beta**2
 
-    y_pred = torch.ge(y_pred.float(), threshold).float()
+    y_pred = torch.ge(torch.sigmoid(y_pred.float()), threshold).float()
     y_true = y_true.float()
 
     true_positive = (y_pred * y_true).sum(dim=1)
