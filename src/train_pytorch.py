@@ -37,6 +37,12 @@ parser.add_argument(
     help='path to the folder containing images'
     'from train set (default: ../input/train-jpg/)')
 parser.add_argument(
+    '--use-gpu',
+    default=False,
+    type=bool,
+    metavar='N',
+    help='flag indicates if we need to train on GPU (default: false)')
+parser.add_argument(
     '--epochs',
     default=90,
     type=int,
@@ -167,9 +173,12 @@ def main():
     args = parser.parse_args()
 
     model = create_model(17)
+    if args.use_gpu:
+        model = torch.nn.DataParallel(model).cuda()
     # define loss function (criterion) and optimizer
 
-    criterion = nn.BCEWithLogitsLoss().cpu()
+    criterion = (nn.BCEWithLogitsLoss().cuda()
+                 if args.use_gpu else nn.BCEWithLogitsLoss().cpu())
     # criterion = nn.CrossEntropyLoss().cpu()
     optimizer = torch.optim.Adam(model.fc.parameters(), args.lr)
 
@@ -210,7 +219,7 @@ def main():
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.workers,
-        pin_memory=False)
+        pin_memory=args.use_gpu)
 
     val_loader = torch.utils.data.DataLoader(
         KaggleAmazonDataset(
@@ -226,7 +235,7 @@ def main():
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.workers,
-        pin_memory=False)
+        pin_memory=args.use_gpu)
 
     if args.evaluate:
         validate(val_loader, model, criterion)
@@ -268,7 +277,9 @@ def train(train_loader, model, criterion, optimizer, epoch):
         # measure data loading time
         data_time.update(time.time() - end)
 
-        # target = target.cuda(async=True)
+        if args.use_gpu:
+            target = target.cuda(async=True)
+
         input_var = torch.autograd.Variable(input)
         target_var = torch.autograd.Variable(target)
 
@@ -319,7 +330,9 @@ def validate(val_loader, model, criterion):
 
     end = time.time()
     for i, (input, target) in enumerate(val_loader):
-        # target = target.cuda(async=True)
+        if args.use_gpu:
+            target = target.cuda(async=True)
+
         input_var = torch.autograd.Variable(input, volatile=True)
         target_var = torch.autograd.Variable(target, volatile=True)
 
