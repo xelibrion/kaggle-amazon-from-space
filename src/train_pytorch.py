@@ -39,8 +39,7 @@ parser.add_argument(
 parser.add_argument(
     '--use-gpu',
     default=False,
-    type=bool,
-    metavar='N',
+    action='store_true',
     help='flag indicates if we need to train on GPU (default: false)')
 parser.add_argument(
     '--epochs',
@@ -174,7 +173,8 @@ def main():
 
     model = create_model(17)
     if args.use_gpu:
-        model = torch.nn.DataParallel(model).cuda()
+        # model = torch.nn.DataParallel(model).cuda()
+        model = model.cuda()
     # define loss function (criterion) and optimizer
 
     criterion = (nn.BCEWithLogitsLoss().cuda()
@@ -278,6 +278,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
         data_time.update(time.time() - end)
 
         if args.use_gpu:
+            input = input.cuda(async=True)
             target = target.cuda(async=True)
 
         input_var = torch.autograd.Variable(input)

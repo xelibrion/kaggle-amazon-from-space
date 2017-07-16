@@ -1,4 +1,3 @@
-name: kaggle-amazon-from-space
 channels:
 - conda-forge
 - defaults
@@ -24,7 +23,8 @@ dependencies:
 - cmake
 - gcc
 - cffi
-- magma-cuda80
+# - torchvision
+# - magma-cuda80
 - pillow
 - pip:
   - autoflake
