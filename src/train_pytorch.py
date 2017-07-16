@@ -1,21 +1,23 @@
 #!/usr/bin/env python
 
 import argparse
-import os
 import shutil
+import os
 import time
 
 import numpy as np
 import torch.backends.cudnn as cudnn
-import torch.nn as nn
-import torch.nn.functional as F
 import pandas as pd
 import torch
+import torch.nn.functional as F
+import torch.nn as nn
 import torch.nn.parallel
 import torch.optim
 import torch.utils.data
 from PIL import Image
+from botocore import args
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MultiLabelBinarizer
 from torch.utils.data import Dataset
 
 import torchvision.models as models
@@ -137,26 +139,18 @@ class KaggleAmazonDataset(Dataset):
         return x_tensor, y_tensor
 
 
+labels = [
+    'agriculture', 'artisinal_mine', 'bare_ground', 'blooming', 'blow_down',
+    'clear', 'cloudy', 'conventional_mine', 'cultivation', 'habitation',
+    'haze', 'partly_cloudy', 'primary', 'road', 'selective_logging',
+    'slash_burn', 'water'
+]
+
+
 def encode_labels(df):
-    df.set_index('image_name', inplace=True)
-    df_tag_cols = df['tags'].str.split(' ').apply(pd.Series).reset_index()
-    df_tag_melted = pd.melt(
-        df_tag_cols,
-        id_vars='image_name',
-        value_name='tag',
-        var_name='present', )
-    df_tag_melted['present'] = df_tag_melted['present'].astype(int)
-    df_tag_melted.loc[~pd.isnull(df_tag_melted['tag']), 'present'] = 1
-
-    df_y = pd.pivot_table(
-        df_tag_melted,
-        index='image_name',
-        columns='tag',
-        fill_value=0, )
-
-    df_y.columns = df_y.columns.droplevel(0)
-    df_y[df_y.columns] = df_y[df_y.columns].astype(np.uint8)
-    return df_y
+    tags = df['tags'].apply(lambda x: x.split(' ')).values
+    mlb = MultiLabelBinarizer(labels)
+    return mlb.fit_transform(tags)
 
 
 def get_x_y():
@@ -169,11 +163,11 @@ def get_x_y():
     if sample_size:
         x_t, _, y_t, _ = train_test_split(
             df_train['image_name'].values,
-            y_train.values,
-            train_size=sample_size)
+            y_train,
+            train_size=sample_size, )
         return x_t, y_t
 
-    return df_train['image_name'].values, y_train.values
+    return df_train['image_name'].values, y_train
 
 
 def main():
