@@ -332,6 +332,7 @@ def validate(val_loader, model, criterion):
     end = time.time()
     for i, (input, target) in enumerate(val_loader):
         if args.use_gpu:
+            input = input.cuda(async=True)
             target = target.cuda(async=True)
 
         input_var = torch.autograd.Variable(input, volatile=True)
