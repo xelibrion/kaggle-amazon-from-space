@@ -25,6 +25,7 @@ dependencies:
 - gcc
 - cffi
 - magma-cuda80
+- pillow
 - pip:
   - autoflake
   - autopep8
