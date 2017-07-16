@@ -15,7 +15,7 @@ import torch.nn.parallel
 import torch.optim
 import torch.utils.data
 from PIL import Image
-from botocore import args
+
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MultiLabelBinarizer
 from torch.utils.data import Dataset
@@ -267,7 +267,11 @@ def main():
         validate(val_loader, model, criterion)
         return
 
+    epoch_time = AverageMeter()
+
     for epoch in range(args.start_epoch, args.epochs):
+        end = time.time()
+
         adjust_learning_rate(optimizer, epoch)
 
         # train for one epoch
@@ -285,6 +289,10 @@ def main():
             'best_fbeta': best_fbeta,
             'optimizer': optimizer.state_dict(),
         }, is_best)
+
+        epoch_time.update(time.time() - end)
+        print(' * Time taken: {epoch_time.val:.1f}s ({epoch_time.avg:.1f}s)\n'.
+              format(epoch_time=epoch_time))
 
 
 def train(train_loader, model, criterion, optimizer, epoch):
