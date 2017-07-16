@@ -211,7 +211,7 @@ def main():
             Y_train,
             root_dir=args.train_dir,
             transform=transforms.Compose([
-                transforms.RandomSizedCrop(224),
+                transforms.RandomCrop(224),
                 transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
                 normalize,
