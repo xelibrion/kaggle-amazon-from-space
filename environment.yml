@@ -2,6 +2,7 @@ name: kaggle-amazon-from-space
 channels:
 - conda-forge
 - defaults
+- soumith
 dependencies:
 - h5py
 - flake8
@@ -17,6 +18,13 @@ dependencies:
 - scikit-learn
 - scipy
 - seaborn
+- pyyaml
+- mkl
+- setuptools
+- cmake
+- gcc
+- cffi
+- magma-cuda80
 - pip:
   - autoflake
   - autopep8
