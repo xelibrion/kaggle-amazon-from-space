@@ -101,7 +101,9 @@ def create_model(num_classes):
     # Replace the last fully-connected layer
     # Parameters of newly constructed modules
     # have requires_grad=True by default
-    model.fc = nn.Linear(2048, num_classes)
+    model.fc = nn.Sequential(
+        nn.Linear(2048, num_classes),
+        nn.Sigmoid(), )
 
     return model
 
