@@ -22,6 +22,7 @@ from torch.utils.data import Dataset
 
 from torchvision import models
 import torchvision.transforms as transforms
+import itertools
 
 parser = argparse.ArgumentParser(description='Kaggle Amazon from Space')
 
@@ -93,46 +94,22 @@ parser.add_argument(
 best_fbeta = 0
 
 
-class FineTuneModel(nn.Module):
-    def __init__(self, num_classes):
-        super(FineTuneModel, self).__init__()
-
-        base_model = models.resnet50(pretrained=True)
-
-        self.features = nn.Sequential(*list(base_model.children())[:-1])
-        self.classifier = nn.Sequential(
-            nn.Linear(2048, 4096),
-            nn.ReLU(inplace=True),
-            nn.Linear(4096, 4096),
-            nn.ReLU(inplace=True),
-            nn.Linear(4096, 4096),
-            nn.ReLU(inplace=True),
-            nn.Linear(4096, 4096),
-            nn.ReLU(inplace=True),
-            nn.Linear(4096, num_classes), )
-
-        # Freeze those weights
-        for p in self.features.parameters():
-            p.requires_grad = False
-
-    def forward(self, x):
-        f = self.features(x)
-        f = f.view(f.size(0), -1)
-        y = self.classifier(f)
-        return y
-
-
 def create_model(num_classes):
     # create model
     print("=> using pre-trained model resnet50")
-    model = models.resnet50(pretrained=True).cuda()
+    model = models.resnet50(pretrained=True)
 
-    # for param in model.parameters():
-    #     param.requires_grad = False
+    for param in model.parameters():
+        param.requires_grad = False
 
-    model.fc = nn.Linear(2048, num_classes).cuda()
+    model.fc = nn.Linear(2048, num_classes)
 
-    return model
+    for param in itertools.chain(model.layer3.parameters(),
+                                 model.fc.parameters()):
+        param.requires_grad = True
+
+    return model, itertools.chain(model.layer3.parameters(),
+                                  model.fc.parameters())
 
 
 class KaggleAmazonDataset(Dataset):
@@ -216,18 +193,16 @@ def main():
     global args, best_fbeta
     args = parser.parse_args()
 
-    model = create_model(17)
-    # model = FineTuneModel(17)
-    # if args.use_gpu:
-    #     # model = torch.nn.DataParallel(model).cuda()
-    #     model = model.cuda()
-    # define loss function (criterion) and optimizer
+    model, model_params = create_model(17)
 
-    # criterion = nn.BCEWithLogitsLoss()
+    if args.use_gpu:
+        model = model.cuda()
+
+    # define loss function (criterion) and optimizer
     criterion = nn.MultiLabelSoftMarginLoss()
     criterion = criterion.cuda() if args.use_gpu else criterion.cpu()
-    # criterion = nn.CrossEntropyLoss().cpu()
-    optimizer = torch.optim.Adam(model.parameters(), args.lr)
+
+    optimizer = torch.optim.Adam(model_params, args.lr)
 
     # optionally resume from a checkpoint
     if args.resume:
@@ -257,10 +232,10 @@ def main():
             Y_train,
             root_dir=args.train_dir,
             transform=transforms.Compose([
-                transforms.Scale(224),
-                # transforms.RandomHorizontalFlip(),
+                transforms.RandomSizedCrop(224),
+                transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
-                # normalize,
+                normalize,
             ])),
         batch_size=args.batch_size,
         shuffle=True,
@@ -275,7 +250,7 @@ def main():
             transform=transforms.Compose([
                 transforms.Scale(224),
                 transforms.ToTensor(),
-                # normalize,
+                normalize,
             ])),
         batch_size=args.batch_size,
         shuffle=False,
