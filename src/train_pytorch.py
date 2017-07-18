@@ -99,19 +99,19 @@ def create_model(num_classes):
     print("=> using pre-trained model resnet50")
     model = models.resnet50(pretrained=True)
 
-    for param in model.parameters():
-        param.requires_grad = False
+    # for param in model.parameters():
+    #     param.requires_grad = False
 
     model.fc = nn.Linear(2048, num_classes)
 
-    for param in itertools.chain(model.layer3.parameters(),
-                                 model.fc.parameters()):
-        param.requires_grad = True
+    # for param in itertools.chain(model.layer3.parameters(),
+    #                              model.fc.parameters()):
+    #     param.requires_grad = True
 
-    return model, itertools.chain(model.layer3.parameters(),
-                                  model.fc.parameters())
+    # return model, itertools.chain(model.layer3.parameters(),
+    #                               model.fc.parameters())
 
-    # return model, model.parameters()
+    return model, model.parameters()
 
 
 class KaggleAmazonDataset(Dataset):
@@ -197,7 +197,7 @@ def main():
     # define loss function (criterion) and optimizer
     criterion = nn.MultiLabelSoftMarginLoss(
         weight=torch.from_numpy(class_weights),
-        size_average=False, )
+        size_average=True, )
     criterion = criterion.cuda() if args.use_gpu else criterion.cpu()
 
     optimizer = torch.optim.Adam(model_params, args.lr)
