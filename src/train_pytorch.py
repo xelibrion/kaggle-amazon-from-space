@@ -220,6 +220,7 @@ def main():
 
     cudnn.benchmark = True
 
+    print("Loading data")
     X, Y = get_x_y()
     X_train, X_val, Y_train, Y_val = train_test_split(X, Y, test_size=0.2)
 
@@ -263,6 +264,7 @@ def main():
 
     epoch_time = AverageMeter()
 
+    print("Starting training")
     for epoch in range(args.start_epoch, args.epochs):
         end = time.time()
 
