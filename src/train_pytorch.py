@@ -111,6 +111,8 @@ def create_model(num_classes):
     return model, itertools.chain(model.layer3.parameters(),
                                   model.fc.parameters())
 
+    # return model, model.parameters()
+
 
 class KaggleAmazonDataset(Dataset):
     def __init__(self, x_set, y_set, root_dir, transform=None):
@@ -141,29 +143,23 @@ labels = [
     'slash_burn', 'water'
 ]
 
-label_weights = {
-    'agriculture': 3.0461226146975235,
-    'artisinal_mine': 110.65781710914455,
-    'bare_ground': 43.518561484918791,
-    'blooming': 112.9909638554217,
-    'blow_down': 382.78571428571428,
-    'clear': 1.3194400478351096,
-    'cloudy': 17.957395883197702,
-    'conventional_mine': 375.13000000000005,
-    'cultivation': 8.37904846995756,
-    'habitation': 10.249453551912568,
-    'haze': 13.909158324063775,
-    'partly_cloudy': 5.1663682688334944,
-    'primary': 1.0,
-    'road': 4.647875108412836,
-    'selective_logging': 110.33235294117647,
-    'slash_burn': 179.48803827751198,
-    'water': 5.0618000269869121
-}
 
-label_weights_arr = [
-    label_weights[key] for key in sorted(label_weights.keys())
-]
+def get_class_weights(labels, y):
+    df_y = pd.DataFrame(y, columns=labels)
+    df_w = 1 / (df_y.sum() / df_y.shape[0])
+    df_w = df_w.apply(np.log) + 1
+    weights_dict = df_w.to_dict()
+    return [weights_dict[x] for x in labels]
+
+
+class_weights = np.array([
+    2.1899652895442587, 5.7825384927184471, 4.8492833294352042,
+    5.803403631182408, 7.0235711214283247, 1.3533032219605925,
+    3.9640978385423313, 7.0033684141108061, 3.2018301418579314,
+    3.4033201737034853, 3.7086432769591671, 2.7182657607186504,
+    1.0760957815487335, 2.6125059307745246, 5.7795929824886896,
+    6.2662043481340861, 2.697817938147538
+], 'float32')
 
 
 def encode_labels(df):
@@ -199,7 +195,9 @@ def main():
         model = model.cuda()
 
     # define loss function (criterion) and optimizer
-    criterion = nn.MultiLabelSoftMarginLoss()
+    criterion = nn.MultiLabelSoftMarginLoss(
+        weight=torch.from_numpy(class_weights),
+        size_average=False, )
     criterion = criterion.cuda() if args.use_gpu else criterion.cpu()
 
     optimizer = torch.optim.Adam(model_params, args.lr)
@@ -233,7 +231,7 @@ def main():
             Y_train,
             root_dir=args.train_dir,
             transform=transforms.Compose([
-                transforms.RandomSizedCrop(224),
+                transforms.RandomCrop(224),
                 transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
                 normalize,
