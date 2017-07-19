@@ -196,8 +196,7 @@ def main():
 
     # define loss function (criterion) and optimizer
     criterion = nn.MultiLabelSoftMarginLoss(
-        weight=torch.from_numpy(class_weights),
-        size_average=True, )
+        weight=torch.from_numpy(class_weights))
     criterion = criterion.cuda() if args.use_gpu else criterion.cpu()
 
     optimizer = torch.optim.Adam(model_params, args.lr)
@@ -223,7 +222,7 @@ def main():
     X_train, X_val, Y_train, Y_val = train_test_split(
         X,
         Y,
-        test_size=0.2,
+        test_size=0.15,
         random_state=42, )
 
     normalize = transforms.Normalize((0.302751, 0.344464, 0.315358),
