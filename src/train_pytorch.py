@@ -220,7 +220,11 @@ def main():
 
     print("Loading data")
     X, Y = get_x_y()
-    X_train, X_val, Y_train, Y_val = train_test_split(X, Y, test_size=0.2)
+    X_train, X_val, Y_train, Y_val = train_test_split(
+        X,
+        Y,
+        test_size=0.2,
+        random_state=42, )
 
     normalize = transforms.Normalize((0.302751, 0.344464, 0.315358),
                                      (0.127995, 0.132469, 0.152108))
