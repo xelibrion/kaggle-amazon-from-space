@@ -57,24 +57,31 @@ def define_args():
     return parser
 
 
-class PredictDataset(Dataset):
-    def __init__(self, x_set, root_dir, transform=None):
-        self.x = x_set
-        self.root_dir = root_dir
-        self.transform = transform
-
-    def __len__(self):
-        return len(self.x)
-
-    def __getitem__(self, idx):
-        img_name = os.path.join(self.root_dir, "{}.jpg".format(self.x[idx]))
-        image = Image.open(img_name)
+class LoadImageAsPIL(object):
+    def __call__(self, img_path):
+        image = Image.open(img_path)
         if image.mode == 'CMYK':
             image = image.convert('RGB')
+        return image
 
-        x_tensor = self.transform(image) if self.transform else image
 
-        return x_tensor
+class TTADataset(Dataset):
+    def __init__(self, x_set, root_dir, transform_sets):
+        self.x = x_set
+        self.root_dir = root_dir
+        self.transform_sets = transform_sets
+        assert len(transform_sets) > 0
+
+    def __len__(self):
+        return len(self.x) * len(self.transform_sets)
+
+    def __getitem__(self, idx):
+        idx_x = idx // len(self.transform_sets) + 1
+        img_name = self.x[idx_x]
+
+        img_path = os.path.join(self.root_dir, "{}.jpg".format(img_name))
+
+        return [t_set(img_path) for t_set in self.transform_sets]
 
 
 def get_mlb():
@@ -106,19 +113,23 @@ def main():
     normalize = transforms.Normalize((0.302751, 0.344464, 0.315358),
                                      (0.127995, 0.132469, 0.152108))
 
-    apply_aug = transforms.Compose([
-        transforms.Scale(224),
-        transforms.ToTensor(),
-        normalize,
-    ])
+    transforms_sets = {
+        'default':
+        transforms.Compose([
+            LoadImageAsPIL(),
+            transforms.Scale(224),
+            transforms.ToTensor(),
+            normalize,
+        ])
+    }
 
     df_test = pd.read_csv('../input/sample_submission_v2.csv')
 
     predict_loader = torch.utils.data.DataLoader(
-        PredictDataset(
+        TTADataset(
             df_test['image_name'].values,
             root_dir=args.images_dir,
-            transform=apply_aug),
+            transform_sets=transforms_sets.values()),
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.workers,
