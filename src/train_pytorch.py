@@ -4,6 +4,7 @@ import argparse
 import shutil
 import os
 import time
+import random
 
 import numpy as np
 import torch.backends.cudnn as cudnn
@@ -185,6 +186,16 @@ def get_x_y():
     return df_train['image_name'].values, y_train
 
 
+class RandomHorizontalFlip(object):
+    def __init__(self, p=0.5):
+        self.p = p
+
+    def __call__(self, img):
+        if random.random() < self.p:
+            return img.transpose(Image.FLIP_LEFT_RIGHT)
+        return img
+
+
 def main():
     global args, best_fbeta
     args = parser.parse_args()
@@ -234,8 +245,8 @@ def main():
             Y_train,
             root_dir=args.train_dir,
             transform=transforms.Compose([
-                transforms.RandomCrop(224),
-                transforms.RandomHorizontalFlip(),
+                transforms.RandomSizedCrop(224),
+                # RandomHorizontalFlip(0.2),
                 transforms.ToTensor(),
                 normalize,
             ])),
