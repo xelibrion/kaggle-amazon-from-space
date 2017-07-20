@@ -25,72 +25,78 @@ from torchvision import models
 import torchvision.transforms as transforms
 import itertools
 
-parser = argparse.ArgumentParser(description='Kaggle Amazon from Space')
 
-parser.add_argument(
-    '-j',
-    '--workers',
-    default=4,
-    type=int,
-    metavar='N',
-    help='number of data loading workers (default: 4)')
-parser.add_argument(
-    '--train-dir',
-    default='../input/train-jpg',
-    type=str,
-    metavar='N',
-    help='path to the folder containing images'
-    'from train set (default: ../input/train-jpg/)')
-parser.add_argument(
-    '--use-gpu',
-    default=False,
-    action='store_true',
-    help='flag indicates if we need to train on GPU (default: false)')
-parser.add_argument(
-    '--epochs',
-    default=90,
-    type=int,
-    metavar='N',
-    help='number of total epochs to run')
-parser.add_argument(
-    '--start-epoch',
-    default=0,
-    type=int,
-    metavar='N',
-    help='manual epoch number (useful on restarts)')
-parser.add_argument(
-    '-b',
-    '--batch-size',
-    default=256,
-    type=int,
-    metavar='N',
-    help='mini-batch size (default: 256)')
-parser.add_argument(
-    '--lr',
-    '--learning-rate',
-    default=1e-3,
-    type=float,
-    metavar='LR',
-    help='initial learning rate')
-parser.add_argument(
-    '--print-freq',
-    '-p',
-    default=10,
-    type=int,
-    metavar='N',
-    help='print frequency (default: 10)')
-parser.add_argument(
-    '--resume',
-    default='',
-    type=str,
-    metavar='PATH',
-    help='path to latest checkpoint (default: none)')
-parser.add_argument(
-    '-e',
-    '--evaluate',
-    dest='evaluate',
-    action='store_true',
-    help='evaluate model on validation set')
+def define_args():
+
+    parser = argparse.ArgumentParser(description='Kaggle Amazon from Space')
+
+    parser.add_argument(
+        '-j',
+        '--workers',
+        default=4,
+        type=int,
+        metavar='N',
+        help='number of data loading workers (default: 4)')
+    parser.add_argument(
+        '--train-dir',
+        default='../input/train-jpg',
+        type=str,
+        metavar='N',
+        help='path to the folder containing images'
+        'from train set (default: ../input/train-jpg/)')
+    parser.add_argument(
+        '--use-gpu',
+        default=False,
+        action='store_true',
+        help='flag indicates if we need to train on GPU (default: false)')
+    parser.add_argument(
+        '--epochs',
+        default=90,
+        type=int,
+        metavar='N',
+        help='number of total epochs to run')
+    parser.add_argument(
+        '--start-epoch',
+        default=0,
+        type=int,
+        metavar='N',
+        help='manual epoch number (useful on restarts)')
+    parser.add_argument(
+        '-b',
+        '--batch-size',
+        default=256,
+        type=int,
+        metavar='N',
+        help='mini-batch size (default: 256)')
+    parser.add_argument(
+        '--lr',
+        '--learning-rate',
+        default=1e-3,
+        type=float,
+        metavar='LR',
+        help='initial learning rate')
+    parser.add_argument(
+        '--print-freq',
+        '-p',
+        default=10,
+        type=int,
+        metavar='N',
+        help='print frequency (default: 10)')
+    parser.add_argument(
+        '--resume',
+        default='',
+        type=str,
+        metavar='PATH',
+        help='path to latest checkpoint (default: none)')
+    parser.add_argument(
+        '-e',
+        '--evaluate',
+        dest='evaluate',
+        action='store_true',
+        help='evaluate model on validation set')
+
+    return parser
+
 
 best_fbeta = 0
 
@@ -198,6 +204,7 @@ class RandomHorizontalFlip(object):
 
 def main():
     global args, best_fbeta
+    parser = define_args()
     args = parser.parse_args()
 
     model, model_params = create_model(17)
