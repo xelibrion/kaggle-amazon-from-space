@@ -3,6 +3,7 @@
 import argparse
 import os
 
+import cv2
 import numpy as np
 import pandas as pd
 import torch
@@ -13,6 +14,7 @@ from tqdm import tqdm
 
 import torchvision.transforms as transforms
 from train_pytorch import create_model, labels
+from imgaug import augmenters as iaa
 
 
 def define_args():
@@ -65,6 +67,51 @@ class LoadImageAsPIL(object):
         return image
 
 
+class LoadImageAsNumpyArray(object):
+    def __call__(self, img_path):
+        return cv2.imread(img_path, -1)
+
+
+class CenterCrop(object):
+    def __init__(self):
+        self.transform = iaa.Crop(px=(16, 16, 16, 16), keep_size=False)
+
+    def __call__(self, img):
+        return self.transform.augment_image(img)
+
+
+class TopLeftCrop(object):
+    def __init__(self):
+        self.transform = iaa.Crop(px=(0, 32, 32, 0), keep_size=False)
+
+    def __call__(self, img):
+        return self.transform.augment_image(img)
+
+
+class TopRightCrop(object):
+    def __init__(self):
+        self.transform = iaa.Crop(px=(0, 0, 32, 32), keep_size=False)
+
+    def __call__(self, img):
+        return self.transform.augment_image(img)
+
+
+class BottomLeftCrop(object):
+    def __init__(self):
+        self.transform = iaa.Crop(px=(32, 32, 0, 0), keep_size=False)
+
+    def __call__(self, img):
+        return self.transform.augment_image(img)
+
+
+class BottomRightCrop(object):
+    def __init__(self):
+        self.transform = iaa.Crop(px=(32, 0, 0, 32), keep_size=False)
+
+    def __call__(self, img):
+        return self.transform.augment_image(img)
+
+
 class TTADataset(Dataset):
     def __init__(self, x_set, root_dir, transform_sets):
         self.x = x_set
@@ -103,39 +150,62 @@ def main():
     args = parser.parse_args()
 
     model, _ = create_model(17)
+    model = model.cuda()
 
-    if args.use_gpu:
-        checkpoint = torch.load(args.checkpoint_file)
-        model.load_state_dict(checkpoint['state_dict'])
+    checkpoint = torch.load(args.checkpoint_file)
+    model.load_state_dict(checkpoint['state_dict'])
 
     model.eval()
 
     normalize = transforms.Normalize((0.302751, 0.344464, 0.315358),
                                      (0.127995, 0.132469, 0.152108))
 
-    transforms_sets = {
-        'default':
+    transform_sets = {
+        'scaled':
         transforms.Compose([
             LoadImageAsPIL(),
             transforms.Scale(224),
             transforms.ToTensor(),
             normalize,
-        ])
+        ]),
+        'center-crop':
+        transforms.Compose([
+            LoadImageAsNumpyArray(),
+            CenterCrop(),
+            transforms.ToTensor(),
+            normalize,
+        ]),
+        'top-left-crop':
+        transforms.Compose([
+            LoadImageAsNumpyArray(),
+            TopLeftCrop(),
+            transforms.ToTensor(),
+            normalize,
+        ]),
+        'top-right-crop':
+        transforms.Compose([
+            LoadImageAsNumpyArray(),
+            TopRightCrop(),
+            transforms.ToTensor(),
+            normalize,
+        ]),
+        'bottom-left-crop':
+        transforms.Compose([
+            LoadImageAsNumpyArray(),
+            BottomLeftCrop(),
+            transforms.ToTensor(),
+            normalize,
+        ]),
+        'bottom-right-crop':
+        transforms.Compose([
+            LoadImageAsNumpyArray(),
+            BottomRightCrop(),
+            transforms.ToTensor(),
+            normalize,
+        ]),
     }
 
     df_test = pd.read_csv('../input/sample_submission_v2.csv')
-
-    predict_loader = torch.utils.data.DataLoader(
-        TTADataset(
-            df_test['image_name'].values,
-            root_dir=args.images_dir,
-            transform_sets=transforms_sets.values()),
-        batch_size=args.batch_size,
-        shuffle=False,
-        num_workers=args.workers,
-        pin_memory=False)
-
-    t = tqdm(total=df_test.shape[0])
 
     threshold = 0.5
 
@@ -143,19 +213,22 @@ def main():
 
     mlb = get_mlb()
 
-    for i, input_t in enumerate(predict_loader):
-        if args.use_gpu:
-            input_t = input_t.cuda(async=True)
+    for image_name in tqdm(df_test['image_name'].values):
+        img_path = os.path.join(args.images_dir, '%s.jpg' % image_name)
 
+        tensors_seq = map(lambda x: x(img_path), transform_sets.values())
+        tensors_seq = map(lambda x: x.expand([1, 3, 224, 224]), tensors_seq)
+        input_t = torch.cat(tensors_seq)
+
+        input_t = input_t.cuda(async=False)
         input_var = torch.autograd.Variable(input_t)
+        out_t = model(input_var).float()
 
-        y_pred = model(input_var)
-        y_pred = torch.ge(torch.sigmoid(y_pred.float()), threshold).float()
+        y_pred = torch.sigmoid(out_t)
+        y_pred = torch.ge(y_pred.mean(dim=0), threshold).float()
         pred_batch = y_pred.data.cpu().numpy()
 
-        result.extend(batch_to_labels(mlb, pred_batch))
-
-        t.update(min(pred_batch.shape[0], args.batch_size))
+        result.extend(batch_to_labels(mlb, np.expand_dims(pred_batch, 0)))
 
     df_test['tags'] = result
     df_test.to_csv('./my_sub_resnet50.csv', index=False)
