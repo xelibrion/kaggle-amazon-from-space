@@ -1,0 +1,10 @@
+* TODO Things to fix
+- [ ] Create class-balanced folds and use them instead of class weights
+- [ ] Use 2-pass training:
+  - Top linear layer first
+  - Once converged, train full model
+- Augmentations:
+  - [ ] Use D4
+  - [ ] Use zoom
+  - [ ] Use contrast
+  - [ ] Use rotate

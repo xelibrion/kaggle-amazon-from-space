@@ -23,6 +23,7 @@ dependencies:
 - cmake
 - gcc
 - cffi
+- tqdm
 # - torchvision
 # - magma-cuda80
 - pillow
