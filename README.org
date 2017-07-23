@@ -8,3 +8,4 @@
   - [ ] Use zoom
   - [ ] Use contrast
   - [ ] Use rotate
+  - [ ] RandomSizedCrop
