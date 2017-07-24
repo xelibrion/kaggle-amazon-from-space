@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+import os
+
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MultiLabelBinarizer
@@ -43,7 +45,7 @@ def get_label_pack_complexity(df):
 def make_balanced_folds(y, num_folds=5):
 
     df_y = pd.DataFrame(y, columns=labels)
-    df_fold = pd.Series(index=df_y.index)
+    s_fold = pd.Series(index=df_y.index)
 
     label_counts = df_y.sum()
     mean_labels_by_label = get_label_pack_complexity(df_y)
@@ -57,7 +59,7 @@ def make_balanced_folds(y, num_folds=5):
         label_items = df_y[df_y[label] == 1].index
         to_sample = left_to_sample.intersection(label_items)
 
-        print(to_sample.shape)
+        print(label, to_sample.shape)
         print(fold_counts[label_idx, :])
 
         sample_index = to_sample.values
@@ -68,19 +70,43 @@ def make_balanced_folds(y, num_folds=5):
         for item_idx in sample_index:
             fold_idx = np.argmin(fold_counts[label_idx, :])
 
-            df_fold.loc[item_idx] = fold_idx
+            s_fold.loc[item_idx] = fold_idx
 
             fold_counts[:, fold_idx] += df_y.loc[item_idx, :]
             already_sampled.add(item_idx)
 
-        print(label)
         print(fold_counts[label_idx, :])
 
         assert np.sum(fold_counts[label_idx, :]) == label_counts.loc[label]
 
     print(fold_counts)
-    return df_fold
+    return s_fold.astype(int)
 
 
-_, y = get_x_y()
-df_fold = make_balanced_folds(y)
+def make_splits():
+    x, y = get_x_y()
+    num_folds = 5
+    s_fold = make_balanced_folds(y, num_folds)
+
+    df = pd.DataFrame(y, columns=labels)
+    df['image_name'] = x
+    df['fold'] = s_fold
+
+    for val_fold in reversed(range(num_folds)):
+        ft = df['fold'] == val_fold
+        train_df = df[~ft]
+        val_df = df[ft]
+        print(train_df.shape[0], val_df.shape[0])
+
+        fold_dir = '../input/fold_{}'.format(num_folds - val_fold)
+        os.makedirs(fold_dir, exist_ok=True)
+        train_df.to_csv(os.path.join(fold_dir, 'train.csv'), index=False)
+        val_df.to_csv(os.path.join(fold_dir, 'val.csv'), index=False)
+
+
+def main():
+    make_splits()
+
+
+if __name__ == '__main__':
+    main()
