@@ -6,7 +6,6 @@ dependencies:
 - h5py
 - flake8
 - ipython
-- jedi
 - jupyter
 - matplotlib
 - numpy
@@ -31,6 +30,7 @@ dependencies:
   - autoflake
   - autopep8
   - elpy
+  - rope
   - importmagic
   - opencv-python
   - yapf
