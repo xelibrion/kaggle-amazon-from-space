@@ -1,30 +1,24 @@
 #!/usr/bin/env python
 
 import argparse
-import shutil
 import os
-import time
 import random
 
+import torch.nn as nn
+
 import numpy as np
-import torch.backends.cudnn as cudnn
 import pandas as pd
 import torch
-import torch.nn.functional as F
-import torch.nn as nn
+import torch.backends.cudnn as cudnn
 import torch.nn.parallel
 import torch.optim
 import torch.utils.data
 from PIL import Image
-
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MultiLabelBinarizer
 from torch.utils.data import Dataset
 
-from torchvision import models
 import torchvision.transforms as transforms
-import itertools
-from folds import labels
+from model_tuner import Tuner
+from torchvision import models
 
 
 def define_args():
@@ -95,12 +89,6 @@ def define_args():
         type=str,
         metavar='PATH',
         help='path to latest checkpoint (default: none)')
-    parser.add_argument(
-        '-e',
-        '--evaluate',
-        dest='evaluate',
-        action='store_true',
-        help='evaluate model on validation set')
 
     return parser
 
@@ -125,7 +113,7 @@ def create_model(num_classes):
     # return model, itertools.chain(model.layer3.parameters(),
     #                               model.fc.parameters())
 
-    return model, model.parameters()
+    return model, model.fc.parameters(), model.parameters()
 
 
 class KaggleAmazonDataset(Dataset):
@@ -178,39 +166,7 @@ class RandomHorizontalFlip(object):
         return img
 
 
-def main():
-    global args, best_fbeta
-    parser = define_args()
-    args = parser.parse_args()
-
-    num_classes = 17
-    model, model_params = create_model(num_classes)
-
-    if args.use_gpu:
-        model = model.cuda()
-
-    # define loss function (criterion) and optimizer
-    criterion = nn.MultiLabelSoftMarginLoss()
-    criterion = criterion.cuda() if args.use_gpu else criterion.cpu()
-
-    optimizer = torch.optim.Adam(model_params, args.lr)
-
-    # optionally resume from a checkpoint
-    if args.resume:
-        if os.path.isfile(args.resume):
-            print("=> loading checkpoint '{}'".format(args.resume))
-            checkpoint = torch.load(args.resume)
-            args.start_epoch = checkpoint['epoch']
-            best_fbeta = checkpoint['best_fbeta']
-            model.load_state_dict(checkpoint['state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer'])
-            print("=> loaded checkpoint '{}' (epoch {})"
-                  .format(args.resume, checkpoint['epoch']))
-        else:
-            print("=> no checkpoint found at '{}'".format(args.resume))
-
-    cudnn.benchmark = True
-
+def create_data_pipeline(num_classes):
     print("Loading data")
 
     train_path = os.path.join('../input/fold_{}/train.csv'.format(args.fold))
@@ -257,164 +213,54 @@ def main():
         num_workers=args.workers,
         pin_memory=args.use_gpu)
 
-    if args.evaluate:
-        validate(val_loader, model, criterion)
-        return
-
-    epoch_time = AverageMeter()
-
-    print("Starting training")
-    for epoch in range(args.start_epoch, args.epochs):
-        end = time.time()
-
-        adjust_learning_rate(optimizer, epoch)
-
-        # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch)
-
-        # evaluate on validation set
-        fbeta = validate(val_loader, model, criterion)
-
-        # remember best prec@1 and save checkpoint
-        is_best = fbeta > best_fbeta
-        best_fbeta = max(fbeta, best_fbeta)
-        save_checkpoint({
-            'epoch': epoch + 1,
-            'state_dict': model.state_dict(),
-            'best_fbeta': best_fbeta,
-            'optimizer': optimizer.state_dict(),
-        }, is_best)
-
-        epoch_time.update(time.time() - end)
-        print(' * Time taken: {epoch_time.val:.1f}s ({epoch_time.avg:.1f}s)\n'.
-              format(epoch_time=epoch_time))
+    return train_loader, val_loader
 
 
-def train(train_loader, model, criterion, optimizer, epoch):
-    batch_time = AverageMeter()
-    data_time = AverageMeter()
-    losses = AverageMeter()
-    f2_meter = AverageMeter()
+def main():
+    global args, best_fbeta
+    parser = define_args()
+    args = parser.parse_args()
 
-    # switch to train mode
-    model.train()
+    num_classes = 17
+    model, bootstrap_params, full_params = create_model(num_classes)
+    criterion = nn.MultiLabelSoftMarginLoss()
 
-    end = time.time()
-    for i, (input, target) in enumerate(train_loader):
+    if args.use_gpu:
+        model = model.cuda()
+        criterion = criterion.cuda()
 
-        # measure data loading time
-        data_time.update(time.time() - end)
+    bootstrap_optimizer = torch.optim.Adam(bootstrap_params, args.lr)
+    optimizer = torch.optim.Adam(full_params, args.lr)
 
-        if args.use_gpu:
-            input = input.cuda(async=True)
-            target = target.cuda(async=True)
+    # optionally resume from a checkpoint
+    if args.resume:
+        if os.path.isfile(args.resume):
+            print("=> loading checkpoint '{}'".format(args.resume))
+            checkpoint = torch.load(args.resume)
+            args.start_epoch = checkpoint['epoch']
+            best_fbeta = checkpoint['best_fbeta']
+            model.load_state_dict(checkpoint['state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer'])
+            print("=> loaded checkpoint '{}' (epoch {})"
+                  .format(args.resume, checkpoint['epoch']))
+        else:
+            print("=> no checkpoint found at '{}'".format(args.resume))
 
-        input_var = torch.autograd.Variable(input)
-        target_var = torch.autograd.Variable(target)
+    cudnn.benchmark = True
 
-        # compute output
-        output = model(input_var)
-        loss = criterion(output, target_var)
+    train_loader, val_loader = create_data_pipeline(num_classes)
 
-        # measure accuracy and record loss
-        losses.update(loss.data[0], input.size(0))
-        f2_score = fbeta_score(target, output.data)
-        f2_meter.update(f2_score, input.size(0))
-        # top5.update(prec5[0], input.size(0))
+    tuner = Tuner(
+        model,
+        criterion,
+        bootstrap_optimizer,
+        optimizer,
+        bootstrap_epochs=1,
+        epochs=60,
+        use_gpu=args.use_gpu,
+        print_freq=args.print_freq)
 
-        # compute gradient and do SGD step
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        # measure elapsed time
-        batch_time.update(time.time() - end)
-        end = time.time()
-
-        if i % args.print_freq == 0:
-            print('Epoch: [{0}][{1}/{2}]\t'
-                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                  'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
-                  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'F2-score {f2_score.val:.3f} ({f2_score.avg:.3f})'.format(
-                      epoch,
-                      i,
-                      len(train_loader),
-                      batch_time=batch_time,
-                      data_time=data_time,
-                      loss=losses,
-                      f2_score=f2_meter))
-
-
-def validate(val_loader, model, criterion):
-    batch_time = AverageMeter()
-    losses = AverageMeter()
-    f2_meter = AverageMeter()
-
-    # switch to evaluate mode
-    model.eval()
-
-    end = time.time()
-    for i, (input, target) in enumerate(val_loader):
-        if args.use_gpu:
-            input = input.cuda(async=True)
-            target = target.cuda(async=True)
-
-        input_var = torch.autograd.Variable(input, volatile=True)
-        target_var = torch.autograd.Variable(target, volatile=True)
-
-        # compute output
-        output = model(input_var)
-        loss = criterion(output, target_var)
-
-        # measure accuracy and record loss
-        losses.update(loss.data[0], input.size(0))
-        f2_score = fbeta_score(target, output.data)
-        f2_meter.update(f2_score, input.size(0))
-
-        # measure elapsed time
-        batch_time.update(time.time() - end)
-        end = time.time()
-
-        if i % args.print_freq == 0:
-            print('Test: [{0}/{1}]\t'
-                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'F2-score {f2_score.val:.3f} ({f2_score.avg:.3f})'.format(
-                      i,
-                      len(val_loader),
-                      batch_time=batch_time,
-                      loss=losses,
-                      f2_score=f2_meter, ))
-
-    print(' * F2-score {f2_score.avg:.3f}'.format(f2_score=f2_meter))
-
-    return f2_meter.avg
-
-
-def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
-    torch.save(state, filename)
-    if is_best:
-        shutil.copyfile(filename, 'model_best.pth.tar')
-
-
-class AverageMeter(object):
-    """Computes and stores the average and current value"""
-
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
+    tuner.run(train_loader, val_loader)
 
 
 def adjust_learning_rate(optimizer, epoch):
@@ -422,53 +268,6 @@ def adjust_learning_rate(optimizer, epoch):
     lr = args.lr * (0.1**(epoch // 30))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
-
-
-def accuracy(output, target, topk=(1, )):
-    """Computes the precision@k for the specified values of k"""
-    maxk = max(topk)
-    batch_size = target.size(0)
-
-    _, pred = output.topk(maxk, 1, True, True)
-    pred = pred.t()
-
-    correct = pred.eq(target.view(1, -1).expand_as(pred))
-
-    res = []
-    for k in topk:
-        correct_k = correct[:k].view(-1).float().sum(0)
-        res.append(correct_k.mul_(100.0 / batch_size))
-    return res
-
-
-def fbeta_score(y_true, y_pred, beta=2, threshold=0.5, eps=1e-9):
-    beta2 = beta**2
-
-    y_pred = torch.ge(torch.sigmoid(y_pred.float()), threshold).float()
-    y_true = y_true.float()
-
-    true_positive = (y_pred * y_true).sum(dim=1)
-    precision = true_positive.div(y_pred.sum(dim=1).add(eps))
-    recall = true_positive.div(y_true.sum(dim=1).add(eps))
-
-    return torch.mean(
-        (precision *
-         recall).div(precision.mul(beta2) + recall + eps).mul(1 + beta2))
-
-
-class BinaryCrossEntropyLoss(nn.Module):
-    def __init__(self, weight=None, size_average=False):
-        super(BinaryCrossEntropyLoss, self).__init__()
-        self.size_average = size_average
-        self.register_buffer('weight', weight)
-
-    def forward(self, input, target):
-        print(self.weight)
-        return F.binary_cross_entropy_with_logits(
-            input,
-            target,
-            self.weight,
-            size_average=self.size_average, )
 
 
 if __name__ == '__main__':

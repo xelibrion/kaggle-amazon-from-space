@@ -1,6 +1,6 @@
 * TODO Things to fix
-- [ ] Create class-balanced folds and use them instead of class weights
-- [ ] Use 2-pass training:
+- [X] Create class-balanced folds and use them instead of class weights
+- [X] Use 2-pass training:
   - Top linear layer first
   - Once converged, train full model
 - Augmentations:
@@ -9,3 +9,7 @@
   - [ ] Use contrast
   - [ ] Use rotate
   - [ ] RandomSizedCrop
+- [ ] Add plots of learning curves
+- [ ] Descrease learning rate on plateu
+- [ ] Tweak learning rate
+- [ ] Implement early stopping
