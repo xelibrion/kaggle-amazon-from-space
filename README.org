@@ -8,8 +8,8 @@
   - [ ] Use zoom
   - [ ] Use contrast
   - [ ] Use rotate
-  - [ ] RandomSizedCrop
+  - [X] RandomSizedCrop
 - [ ] Add plots of learning curves
 - [ ] Descrease learning rate on plateu
-- [ ] Tweak learning rate
+- [X] Tweak learning rate
 - [ ] Implement early stopping

@@ -5,7 +5,6 @@ import os
 import random
 
 import torch.nn as nn
-
 import numpy as np
 import pandas as pd
 import torch
@@ -18,6 +17,7 @@ from torch.utils.data import Dataset
 
 import torchvision.transforms as transforms
 from model_tuner import Tuner
+import augmentations
 from torchvision import models
 
 
@@ -72,7 +72,7 @@ def define_args():
     parser.add_argument(
         '--lr',
         '--learning-rate',
-        default=1e-3,
+        default=1e-4,
         type=float,
         metavar='LR',
         help='initial learning rate')
@@ -189,7 +189,12 @@ def create_data_pipeline(num_classes):
             root_dir=args.train_dir,
             transform=transforms.Compose([
                 transforms.RandomSizedCrop(224),
-                # RandomHorizontalFlip(0.2),
+                # augmentations.D4(),
+                # augmentations.Add(-5, 5, per_channel=True),
+                # augmentations.ContrastNormalization(
+                #     0.8,
+                #     1.2,
+                #     per_channel=True, ),
                 transforms.ToTensor(),
                 normalize,
             ])),
@@ -204,7 +209,8 @@ def create_data_pipeline(num_classes):
             Y_val,
             root_dir=args.train_dir,
             transform=transforms.Compose([
-                transforms.Scale(224),
+                transforms.Scale(256),
+                transforms.CenterCrop(224),
                 transforms.ToTensor(),
                 normalize,
             ])),
@@ -255,7 +261,7 @@ def main():
         criterion,
         bootstrap_optimizer,
         optimizer,
-        bootstrap_epochs=1,
+        bootstrap_epochs=3,
         epochs=60,
         use_gpu=args.use_gpu,
         print_freq=args.print_freq)
