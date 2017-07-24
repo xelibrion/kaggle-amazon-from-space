@@ -24,6 +24,7 @@ from torch.utils.data import Dataset
 from torchvision import models
 import torchvision.transforms as transforms
 import itertools
+from folds import labels
 
 
 def define_args():
@@ -44,6 +45,12 @@ def define_args():
         metavar='N',
         help='path to the folder containing images'
         'from train set (default: ../input/train-jpg/)')
+    parser.add_argument(
+        '--fold',
+        default=1,
+        type=int,
+        metavar='N',
+        help='fold to train on (default: 1)')
     parser.add_argument(
         '--use-gpu',
         default=False,
@@ -143,14 +150,6 @@ class KaggleAmazonDataset(Dataset):
         return x_tensor, y_tensor
 
 
-labels = [
-    'agriculture', 'artisinal_mine', 'bare_ground', 'blooming', 'blow_down',
-    'clear', 'cloudy', 'conventional_mine', 'cultivation', 'habitation',
-    'haze', 'partly_cloudy', 'primary', 'road', 'selective_logging',
-    'slash_burn', 'water'
-]
-
-
 def get_class_weights(labels, y):
     df_y = pd.DataFrame(y, columns=labels)
     df_w = 1 / (df_y.sum() / df_y.shape[0])
@@ -169,29 +168,6 @@ class_weights = np.array([
 ], 'float32')
 
 
-def encode_labels(df):
-    tags = df['tags'].apply(lambda x: x.split(' ')).values
-    mlb = MultiLabelBinarizer(labels)
-    return mlb.fit_transform(tags)
-
-
-def get_x_y():
-    sample_size = int(os.environ.get('SAMPLE_SIZE', 0))
-
-    df_train = pd.read_csv('../input/train_v2.csv')
-    df_train.sort_values('image_name', inplace=True)
-    y_train = encode_labels(df_train.copy())
-
-    if sample_size:
-        x_t, _, y_t, _ = train_test_split(
-            df_train['image_name'].values,
-            y_train,
-            train_size=sample_size, )
-        return x_t, y_t
-
-    return df_train['image_name'].values, y_train
-
-
 class RandomHorizontalFlip(object):
     def __init__(self, p=0.5):
         self.p = p
@@ -207,14 +183,14 @@ def main():
     parser = define_args()
     args = parser.parse_args()
 
-    model, model_params = create_model(17)
+    num_classes = 17
+    model, model_params = create_model(num_classes)
 
     if args.use_gpu:
         model = model.cuda()
 
     # define loss function (criterion) and optimizer
-    criterion = nn.MultiLabelSoftMarginLoss(
-        weight=torch.from_numpy(class_weights))
+    criterion = nn.MultiLabelSoftMarginLoss()
     criterion = criterion.cuda() if args.use_gpu else criterion.cpu()
 
     optimizer = torch.optim.Adam(model_params, args.lr)
@@ -236,12 +212,16 @@ def main():
     cudnn.benchmark = True
 
     print("Loading data")
-    X, Y = get_x_y()
-    X_train, X_val, Y_train, Y_val = train_test_split(
-        X,
-        Y,
-        test_size=0.15,
-        random_state=42, )
+
+    train_path = os.path.join('../input/fold_{}/train.csv'.format(args.fold))
+    df_train = pd.read_csv(train_path)
+    X_train = df_train['image_name'].values
+    Y_train = df_train[df_train.columns[:num_classes]].values
+
+    val_path = os.path.join('../input/fold_{}/val.csv'.format(args.fold))
+    df_val = pd.read_csv(val_path)
+    X_val = df_val['image_name'].values
+    Y_val = df_val[df_val.columns[:num_classes]].values
 
     normalize = transforms.Normalize((0.302751, 0.344464, 0.315358),
                                      (0.127995, 0.132469, 0.152108))
