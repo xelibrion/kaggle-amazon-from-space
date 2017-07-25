@@ -117,7 +117,7 @@ class Tuner:
             output = self.model(input_var)
             loss = self.criterion(output, target_var)
 
-            f2_score = fbeta_score(target, output.data)
+            f2_score = fbeta_score(target_var.data, output.data)
 
             batch_size = inputs.size(0)
             losses.update(loss.data[0], batch_size)
@@ -159,7 +159,7 @@ class Tuner:
             output = self.model(input_var)
             loss = self.criterion(output, target_var)
 
-            f2_score = fbeta_score(target, output.data)
+            f2_score = fbeta_score(target_var.data, output.data)
 
             batch_size = inputs.size(0)
             losses.update(loss.data[0], batch_size)
