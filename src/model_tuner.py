@@ -82,7 +82,7 @@ class Tuner:
                 ' * Time taken: {epoch_time.val:.1f}s ({epoch_time.avg:.1f}s)\n'.  # noqa
                 format(epoch_time=epoch_time))
 
-    def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
+    def save_checkpoint(self, state, is_best, filename='checkpoint.pth.tar'):
         torch.save(state, filename)
         if is_best:
             shutil.copyfile(filename, 'model_best.pth.tar')
