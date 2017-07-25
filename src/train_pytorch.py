@@ -189,12 +189,12 @@ def create_data_pipeline(num_classes):
             root_dir=args.train_dir,
             transform=transforms.Compose([
                 transforms.RandomSizedCrop(224),
-                # augmentations.D4(),
-                # augmentations.Add(-5, 5, per_channel=True),
-                # augmentations.ContrastNormalization(
-                #     0.8,
-                #     1.2,
-                #     per_channel=True, ),
+                augmentations.D4(),
+                augmentations.Add(-5, 5, per_channel=True),
+                augmentations.ContrastNormalization(
+                    0.8,
+                    1.2,
+                    per_channel=True, ),
                 transforms.ToTensor(),
                 normalize,
             ])),
@@ -261,7 +261,7 @@ def main():
         criterion,
         bootstrap_optimizer,
         optimizer,
-        bootstrap_epochs=3,
+        bootstrap_epochs=1,
         epochs=60,
         use_gpu=args.use_gpu,
         print_freq=args.print_freq)

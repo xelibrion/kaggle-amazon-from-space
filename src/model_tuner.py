@@ -1,8 +1,10 @@
+import collections
 import shutil
 import time
 
 import numpy as np
 import torch
+from tqdm import tqdm
 
 
 def fbeta_score(y_true, y_pred, beta=2, threshold=0.5, eps=1e-9):
@@ -23,20 +25,26 @@ def fbeta_score(y_true, y_pred, beta=2, threshold=0.5, eps=1e-9):
 class AverageMeter(object):
     """Computes and stores the average and current value"""
 
-    def __init__(self):
-        self.reset()
+    def __init__(self, window_size=20):
+        self.reset(window_size)
 
-    def reset(self):
+    def reset(self, window_size):
         self.val = 0
         self.avg = 0
         self.sum = 0
         self.count = 0
+        self.window = collections.deque([], window_size)
+
+    @property
+    def mavg(self):
+        return np.mean(self.window)
 
     def update(self, val, n=1):
         self.val = val
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
+        self.window.append(self.val)
 
 
 class Tuner:
@@ -56,16 +64,13 @@ class Tuner:
 
         best_fbeta = np.Inf
 
-        epoch_time = AverageMeter()
-        print("Starting training")
         for epoch in range(start_epoch, self.epochs):
-            end = time.time()
-
             # train for one epoch
-            self.train(self.optimizer, train_loader, epoch)
+            self.train_epoch(train_loader, self.optimizer,
+                             'Epoch #{}'.format(epoch))
 
             # evaluate on validation set
-            fbeta = self.validate(val_loader)
+            fbeta = self.validate(val_loader, 'Validating #{}'.format(epoch))
 
             # remember best prec@1 and save checkpoint
             is_best = fbeta > best_fbeta
@@ -77,11 +82,6 @@ class Tuner:
                 'optimizer': self.optimizer.state_dict(),
             }, is_best)
 
-            epoch_time.update(time.time() - end)
-            print(
-                ' * Time taken: {epoch_time.val:.1f}s ({epoch_time.avg:.1f}s)\n'.  # noqa
-                format(epoch_time=epoch_time))
-
     def save_checkpoint(self, state, is_best, filename='checkpoint.pth.tar'):
         torch.save(state, filename)
         if is_best:
@@ -89,78 +89,57 @@ class Tuner:
 
     def bootstrap(self, train_loader):
         """Bootstraps top layer(s) of the model before starting training"""
-        epoch_time = AverageMeter()
 
-        print("Started bootstrapping")
         for epoch in range(self.bootstrap_epochs):
-            end = time.time()
+            self.train_epoch(train_loader, self.bootstrap_optimizer,
+                             'Boostrapping')
 
-            self.train(self.bootstrap_optimizer, train_loader, epoch)
-
-            epoch_time.update(time.time() - end)
-            print(
-                ' * Time taken: {epoch_time.val:.1f}s ({epoch_time.avg:.1f}s)\n'.  # noqa
-                format(epoch_time=epoch_time))
-
-        print("Boostraping finished\n")
-
-    def train(self, optimizer, train_loader, epoch):
+    def train_epoch(self, train_loader, optimizer, stage):
         batch_time = AverageMeter()
-        data_time = AverageMeter()
         losses = AverageMeter()
         f2_meter = AverageMeter()
 
-        # switch to train mode
         self.model.train()
 
-        end = time.time()
-        for i, (input, target) in enumerate(train_loader):
+        tq = tqdm(total=len(train_loader) * train_loader.batch_size)
+        tq.set_description('{:15}'.format(stage))
 
-            # measure data loading time
-            data_time.update(time.time() - end)
+        end = time.time()
+        for i, (inputs, target) in enumerate(train_loader):
 
             if self.use_gpu:
-                input = input.cuda(async=True)
+                inputs = inputs.cuda(async=True)
                 target = target.cuda(async=True)
 
-            input_var = torch.autograd.Variable(input)
+            input_var = torch.autograd.Variable(inputs)
             target_var = torch.autograd.Variable(target)
 
-            # compute output
             output = self.model(input_var)
             loss = self.criterion(output, target_var)
 
-            # measure accuracy and record loss
-            losses.update(loss.data[0], input.size(0))
             f2_score = fbeta_score(target, output.data)
-            f2_meter.update(f2_score, input.size(0))
-            # top5.update(prec5[0], input.size(0))
 
-            # compute gradient and do SGD step
+            batch_size = inputs.size(0)
+            losses.update(loss.data[0], batch_size)
+            f2_meter.update(f2_score, batch_size)
+
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-            # measure elapsed time
             batch_time.update(time.time() - end)
+
+            tq.set_postfix(
+                batch_time='{:.3f}'.format(batch_time.mavg),
+                loss='{:.3f}'.format(losses.mavg),
+                f_beta='{:.3f}'.format(f2_meter.mavg), )
+            tq.update(batch_size)
+
             end = time.time()
 
-            if i % self.print_freq == 0:
-                print(
-                    'Epoch: [{0}][{1}/{2}]\t'
-                    'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                    'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
-                    'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                    'F2-score {f2_score.val:.3f} ({f2_score.avg:.3f})'.format(
-                        epoch,
-                        i,
-                        len(train_loader),
-                        batch_time=batch_time,
-                        data_time=data_time,
-                        loss=losses,
-                        f2_score=f2_meter))
+        tq.close()
 
-    def validate(self, val_loader):
+    def validate(self, val_loader, stage):
         batch_time = AverageMeter()
         losses = AverageMeter()
         f2_meter = AverageMeter()
@@ -168,40 +147,39 @@ class Tuner:
         # switch to evaluate mode
         self.model.eval()
 
+        tq = tqdm(total=len(val_loader) * val_loader.batch_size)
+        tq.set_description('{:15}'.format(stage))
+
         end = time.time()
-        for i, (input, target) in enumerate(val_loader):
+        for i, (inputs, target) in enumerate(val_loader):
             if self.use_gpu:
-                input = input.cuda(async=True)
+                inputs = inputs.cuda(async=True)
                 target = target.cuda(async=True)
 
-            input_var = torch.autograd.Variable(input, volatile=True)
+            input_var = torch.autograd.Variable(inputs, volatile=True)
             target_var = torch.autograd.Variable(target, volatile=True)
 
-            # compute output
             output = self.model(input_var)
             loss = self.criterion(output, target_var)
 
-            # measure accuracy and record loss
-            losses.update(loss.data[0], input.size(0))
             f2_score = fbeta_score(target, output.data)
-            f2_meter.update(f2_score, input.size(0))
 
-            # measure elapsed time
+            batch_size = inputs.size(0)
+            losses.update(loss.data[0], batch_size)
+            f2_meter.update(f2_score, batch_size)
+
             batch_time.update(time.time() - end)
+
+            tq.set_postfix(
+                batch_time='{:.3f}'.format(batch_time.mavg),
+                loss='{:.3f}'.format(losses.mavg),
+                f_beta='{:.3f}'.format(f2_meter.mavg), )
+            tq.update(batch_size)
+
             end = time.time()
 
-            if i % self.print_freq == 0:
-                print(
-                    'Test: [{0}/{1}]\t'
-                    'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                    'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                    'F2-score {f2_score.val:.3f} ({f2_score.avg:.3f})'.format(
-                        i,
-                        len(val_loader),
-                        batch_time=batch_time,
-                        loss=losses,
-                        f2_score=f2_meter, ))
+        tq.close()
 
-        print(' * F2-score {f2_score.avg:.3f}'.format(f2_score=f2_meter))
-
+        print('Validation results (avg): f2 score = {:.3f}, loss = {:.3f}\n'.
+              format(f2_meter.avg, losses.avg))
         return f2_meter.avg
