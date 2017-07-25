@@ -229,7 +229,9 @@ def main():
 
     num_classes = 17
     model, bootstrap_params, full_params = create_model(num_classes)
-    criterion = nn.MultiLabelSoftMarginLoss()
+    criterion = nn.MultiLabelSoftMarginLoss(
+        size_average=False,
+        weight=torch.from_numpy(class_weights), )
 
     if args.use_gpu:
         model = model.cuda()
