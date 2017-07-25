@@ -262,9 +262,7 @@ def main():
         bootstrap_optimizer,
         optimizer,
         bootstrap_epochs=1,
-        epochs=60,
-        use_gpu=args.use_gpu,
-        print_freq=args.print_freq)
+        epochs=60)
 
     tuner.run(train_loader, val_loader)
 

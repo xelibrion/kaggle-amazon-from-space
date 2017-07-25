@@ -47,17 +47,21 @@ class AverageMeter(object):
         self.window.append(self.val)
 
 
+def as_variable(tensor, volatile=False):
+    if torch.cuda.is_available():
+        tensor = tensor.cuda(async=True)
+    return torch.autograd.Variable(tensor, volatile)
+
+
 class Tuner:
     def __init__(self, model, criterion, bootstrap_optimizer, optimizer,
-                 bootstrap_epochs, epochs, use_gpu, print_freq):
+                 bootstrap_epochs, epochs):
         self.model = model
         self.criterion = criterion
         self.bootstrap_optimizer = bootstrap_optimizer
         self.optimizer = optimizer
         self.bootstrap_epochs = bootstrap_epochs
         self.epochs = epochs
-        self.use_gpu = use_gpu
-        self.print_freq = print_freq
 
     def run(self, train_loader, val_loader, start_epoch=0):
         self.bootstrap(train_loader)
@@ -107,12 +111,8 @@ class Tuner:
         end = time.time()
         for i, (inputs, target) in enumerate(train_loader):
 
-            if self.use_gpu:
-                inputs = inputs.cuda(async=True)
-                target = target.cuda(async=True)
-
-            input_var = torch.autograd.Variable(inputs)
-            target_var = torch.autograd.Variable(target)
+            input_var = as_variable(inputs)
+            target_var = as_variable(target)
 
             output = self.model(input_var)
             loss = self.criterion(output, target_var)
@@ -152,12 +152,9 @@ class Tuner:
 
         end = time.time()
         for i, (inputs, target) in enumerate(val_loader):
-            if self.use_gpu:
-                inputs = inputs.cuda(async=True)
-                target = target.cuda(async=True)
 
-            input_var = torch.autograd.Variable(inputs, volatile=True)
-            target_var = torch.autograd.Variable(target, volatile=True)
+            input_var = as_variable(inputs, volatile=True)
+            target_var = as_variable(target, volatile=True)
 
             output = self.model(input_var)
             loss = self.criterion(output, target_var)
