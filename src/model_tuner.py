@@ -7,8 +7,8 @@ import torch
 from tqdm import tqdm
 
 
-def fbeta_score(y_true, y_pred, beta=2, threshold=0.5, eps=1e-9):
-    beta2 = beta**2
+def fbeta_score(y_true, y_pred, beta=2, threshold=0.2, eps=1e-9):
+    beta_sq = beta**2
 
     y_pred = torch.ge(torch.sigmoid(y_pred.float()), threshold).float()
     y_true = y_true.float()
@@ -19,7 +19,7 @@ def fbeta_score(y_true, y_pred, beta=2, threshold=0.5, eps=1e-9):
 
     return torch.mean(
         (precision *
-         recall).div(precision.mul(beta2) + recall + eps).mul(1 + beta2))
+         recall).div(precision.mul(beta_sq) + recall + eps).mul(1 + beta_sq))
 
 
 class AverageMeter(object):
