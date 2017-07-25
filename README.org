@@ -4,9 +4,10 @@
   - Top linear layer first
   - Once converged, train full model
 - Augmentations:
-  - [ ] Use D4
+  - [X] Use D4
+  - [X] Use colour jitter
   - [ ] Use zoom
-  - [ ] Use contrast
+  - [X] Use contrast
   - [ ] Use rotate
   - [X] RandomSizedCrop
 - [ ] Add plots of learning curves
