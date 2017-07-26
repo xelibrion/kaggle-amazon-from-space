@@ -50,7 +50,7 @@ class AverageMeter(object):
 def as_variable(tensor, volatile=False):
     if torch.cuda.is_available():
         tensor = tensor.cuda(async=True)
-    return torch.autograd.Variable(tensor, volatile)
+    return torch.autograd.Variable(tensor, volatile=volatile)
 
 
 class Tuner:

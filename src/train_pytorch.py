@@ -179,8 +179,8 @@ def create_data_pipeline(num_classes):
     X_val = df_val['image_name'].values
     Y_val = df_val[df_val.columns[:num_classes]].values
 
-    normalize = transforms.Normalize((0.302751, 0.344464, 0.315358),
-                                     (0.127995, 0.132469, 0.152108))
+    normalize = transforms.Normalize([0.302751, 0.344464, 0.315358],
+                                     [0.127995, 0.132469, 0.152108])
 
     train_loader = torch.utils.data.DataLoader(
         KaggleAmazonDataset(
@@ -267,13 +267,6 @@ def main():
         epochs=60)
 
     tuner.run(train_loader, val_loader)
-
-
-def adjust_learning_rate(optimizer, epoch):
-    """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
-    lr = args.lr * (0.1**(epoch // 30))
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
 
 
 if __name__ == '__main__':
