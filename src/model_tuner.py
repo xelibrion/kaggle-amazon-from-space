@@ -158,7 +158,7 @@ class Tuner:
 
         tq = tqdm(total=len(train_loader) * train_loader.batch_size)
         description = format_str.format(**locals())
-        tq.set_description('{:15}'.format(description))
+        tq.set_description('{:16}'.format(description))
 
         batch_idx = -1
         end = time.time()
@@ -211,7 +211,7 @@ class Tuner:
 
         tq = tqdm(total=len(val_loader) * val_loader.batch_size)
         description = format_str.format(**locals())
-        tq.set_description('{:15}'.format(description))
+        tq.set_description('{:16}'.format(description))
 
         batch_idx = -1
         end = time.time()
