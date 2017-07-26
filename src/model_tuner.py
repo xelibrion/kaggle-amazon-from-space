@@ -1,6 +1,9 @@
 import collections
+import json
+import os
 import shutil
 import time
+from datetime import datetime
 
 import numpy as np
 import torch
@@ -20,6 +23,12 @@ def fbeta_score(y_true, y_pred, beta=2, threshold=0.2, eps=1e-9):
     return torch.mean(
         (precision *
          recall).div(precision.mul(beta_sq) + recall + eps).mul(1 + beta_sq))
+
+
+def as_variable(tensor, volatile=False):
+    if torch.cuda.is_available():
+        tensor = tensor.cuda(async=True)
+    return torch.autograd.Variable(tensor, volatile=volatile)
 
 
 class AverageMeter(object):
@@ -47,10 +56,16 @@ class AverageMeter(object):
         self.window.append(self.val)
 
 
-def as_variable(tensor, volatile=False):
-    if torch.cuda.is_available():
-        tensor = tensor.cuda(async=True)
-    return torch.autograd.Variable(tensor, volatile=volatile)
+class Emitter:
+    def __init__(self, path):
+        self.path = path
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+
+    def __call__(self, event):
+        with open(self.path, 'a') as out_file:
+            event.update({'timestamp': datetime.utcnow().isoformat()})
+            out_file.write(json.dumps(event))
+            out_file.write('\n')
 
 
 class Tuner:
@@ -71,26 +86,7 @@ class Tuner:
         self.early_stopping = early_stopping
         self.start_epoch = 0
         self.best_score = 0
-
-    def run(self, train_loader, val_loader):
-        self.bootstrap(train_loader)
-        self.train_nnet(train_loader, val_loader)
-
-    def train_nnet(self, train_loader, val_loader):
-        for epoch in range(self.start_epoch, self.epochs):
-            self.train_epoch(train_loader, self.optimizer,
-                             'Epoch #{}'.format(epoch))
-
-            validation_score = self.validate(val_loader,
-                                             'Validating #{}'.format(epoch))
-
-            if self.early_stopping:
-                if self.early_stopping.should_trigger(
-                        epoch,
-                        validation_score, ):
-                    break
-
-            self.save_checkpoint(validation_score, epoch)
+        self.emit = Emitter('./logs/events.json')
 
     def restore_checkpoint(self, checkpoint_file):
         print("=> loading checkpoint '{}'".format(checkpoint_file))
@@ -123,17 +119,37 @@ class Tuner:
         if is_best:
             shutil.copyfile(filename, 'model_best.pth.tar')
 
-    def bootstrap(self, train_loader):
-        """Bootstraps top layer(s) of the model before starting training"""
+    def run(self, train_loader, val_loader):
+        self.bootstrap(train_loader, val_loader)
+        self.train_nnet(train_loader, val_loader)
 
+    def train_nnet(self, train_loader, val_loader):
+        for epoch in range(self.start_epoch, self.epochs):
+            self.train_epoch(train_loader, self.optimizer, epoch, 'training',
+                             'Epoch #{epoch}')
+
+            val_score = self.validate(val_loader, epoch, 'validation',
+                                      'Validating #{epoch}')
+
+            if self.early_stopping:
+                if self.early_stopping.should_trigger(
+                        epoch,
+                        val_score, ):
+                    break
+
+            self.save_checkpoint(val_score, epoch)
+
+    def bootstrap(self, train_loader, val_loader):
         if self.start_epoch:
             return
 
         for epoch in range(self.bootstrap_epochs):
-            self.train_epoch(train_loader, self.bootstrap_optimizer,
-                             'Boostrapping')
+            self.train_epoch(train_loader, self.bootstrap_optimizer, epoch,
+                             'bootstrap', 'Bootstrapping #{epoch}')
+            self.validate(val_loader, epoch, 'bootstrap-val',
+                          'Validating #{epoch}')
 
-    def train_epoch(self, train_loader, optimizer, stage):
+    def train_epoch(self, train_loader, optimizer, epoch, stage, format_str):
         batch_time = AverageMeter()
         losses = AverageMeter()
         f2_meter = AverageMeter()
@@ -141,10 +157,13 @@ class Tuner:
         self.model.train()
 
         tq = tqdm(total=len(train_loader) * train_loader.batch_size)
-        tq.set_description('{:15}'.format(stage))
+        description = format_str.format(**locals())
+        tq.set_description('{:15}'.format(description))
 
+        batch_idx = -1
         end = time.time()
         for i, (inputs, target) in enumerate(train_loader):
+            batch_idx += 1
 
             input_var = as_variable(inputs)
             target_var = as_variable(target)
@@ -170,11 +189,19 @@ class Tuner:
                 f_beta='{:.3f}'.format(f2_meter.mavg), )
             tq.update(batch_size)
 
+            self.emit({
+                'stage': stage,
+                'epoch': epoch,
+                'batch': batch_idx,
+                'f2_score': f2_score,
+                'loss': losses.val
+            })
+
             end = time.time()
 
         tq.close()
 
-    def validate(self, val_loader, stage):
+    def validate(self, val_loader, epoch, stage, format_str):
         batch_time = AverageMeter()
         losses = AverageMeter()
         f2_meter = AverageMeter()
@@ -183,10 +210,13 @@ class Tuner:
         self.model.eval()
 
         tq = tqdm(total=len(val_loader) * val_loader.batch_size)
-        tq.set_description('{:15}'.format(stage))
+        description = format_str.format(**locals())
+        tq.set_description('{:15}'.format(description))
 
+        batch_idx = -1
         end = time.time()
         for i, (inputs, target) in enumerate(val_loader):
+            batch_idx += 1
 
             input_var = as_variable(inputs, volatile=True)
             target_var = as_variable(target, volatile=True)
@@ -208,6 +238,13 @@ class Tuner:
                 f_beta='{:.3f}'.format(f2_meter.mavg), )
             tq.update(batch_size)
 
+            self.emit({
+                'stage': stage,
+                'epoch': epoch,
+                'batch': batch_idx,
+                'f2_score': f2_score,
+                'loss': losses.val
+            })
             end = time.time()
 
         tq.close()

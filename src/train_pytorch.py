@@ -94,7 +94,7 @@ def define_args():
 
     parser.add_argument(
         '--resume',
-        default='checkpoint.pth.tar',
+        default='',
         type=str,
         metavar='PATH',
         help='path to latest checkpoint (default: none)')
