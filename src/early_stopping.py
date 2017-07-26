@@ -59,9 +59,9 @@ class EarlyStopping:
     @property
     def description(self):
         return (
-            'Early stopping has triggered after {last_epoch} epochs.\n'
+            'Early stopping has triggered after {num_epochs} epochs.\n'
             'Best score: {best_score:.3f}, observed at epoch #{best_epoch}'.
             format(
-                last_epoch=self.last_epoch,
+                num_epochs=self.last_epoch + 1,
                 best_score=self.best,
-                best_epoch=self.last_epoch - self.patience, ))
+                best_epoch=self.last_epoch - self.patience - 1, ))
