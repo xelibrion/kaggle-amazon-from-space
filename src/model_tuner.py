@@ -54,14 +54,21 @@ def as_variable(tensor, volatile=False):
 
 
 class Tuner:
-    def __init__(self, model, criterion, bootstrap_optimizer, optimizer,
-                 bootstrap_epochs, epochs):
+    def __init__(self,
+                 model,
+                 criterion,
+                 bootstrap_optimizer,
+                 optimizer,
+                 bootstrap_epochs,
+                 epochs,
+                 early_stopping=None):
         self.model = model
         self.criterion = criterion
         self.bootstrap_optimizer = bootstrap_optimizer
         self.optimizer = optimizer
         self.bootstrap_epochs = bootstrap_epochs
         self.epochs = epochs
+        self.early_stopping = early_stopping
 
     def run(self, train_loader, val_loader, start_epoch=0):
         self.bootstrap(train_loader)
@@ -75,6 +82,11 @@ class Tuner:
 
             # evaluate on validation set
             fbeta = self.validate(val_loader, 'Validating #{}'.format(epoch))
+
+            if self.early_stopping and self.early_stopping.should_trigger(
+                    epoch, fbeta):
+                print(self.early_stopping.description)
+                break
 
             # remember best prec@1 and save checkpoint
             is_best = fbeta > best_fbeta

@@ -13,4 +13,5 @@
 - [ ] Add plots of learning curves
 - [ ] Descrease learning rate on plateu
 - [X] Tweak learning rate
-- [ ] Implement early stopping
+- [X] Implement early stopping
+- [ ] Make model state restorable

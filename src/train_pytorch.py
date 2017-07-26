@@ -18,6 +18,7 @@ from torch.utils.data import Dataset
 import torchvision.transforms as transforms
 from model_tuner import Tuner
 import augmentations
+from early_stopping import EarlyStopping
 from torchvision import models
 
 
@@ -264,7 +265,8 @@ def main():
         bootstrap_optimizer,
         optimizer,
         bootstrap_epochs=1,
-        epochs=60)
+        epochs=60,
+        early_stopping=EarlyStopping(mode='max', patience=2))
 
     tuner.run(train_loader, val_loader)
 
