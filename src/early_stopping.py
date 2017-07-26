@@ -64,4 +64,4 @@ class EarlyStopping:
               format(
                   num_epochs=self.epochs_passed,
                   best_score=self.best,
-                  best_epoch=self.epochs_passed - self.patience, ))
+                  best_epoch=self.epochs_passed - self.patience - 2, ))
