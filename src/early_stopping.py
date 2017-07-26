@@ -3,14 +3,14 @@ class EarlyStopping:
                  mode='min',
                  patience=5,
                  threshold=1e-4,
-                 threshold_mode='rel'):
+                 threshold_mode='rel',
+                 verbose=True):
         self.patience = patience
 
-        # the worse value for the chosen mode
         self.mode_worse = None
-
         self.is_better = None
-        self.last_epoch = -1
+        self.epochs_passed = -1
+        self.verbose = verbose
         self._init_is_better(
             mode=mode, threshold=threshold, threshold_mode=threshold_mode)
         self._reset()
@@ -43,7 +43,7 @@ class EarlyStopping:
 
     def should_trigger(self, epoch, metric):
         current = metric
-        self.last_epoch = epoch
+        self.epochs_passed = epoch + 1
 
         if self.is_better(current, self.best):
             self.best = current
@@ -52,16 +52,16 @@ class EarlyStopping:
             self.num_bad_epochs += 1
 
         if self.num_bad_epochs > self.patience:
+            if self.verbose:
+                self.print_summary()
             return True
 
         return False
 
-    @property
-    def description(self):
-        return (
-            'Early stopping has triggered after {num_epochs} epochs.\n'
-            'Best score: {best_score:.3f}, observed at epoch #{best_epoch}'.
-            format(
-                num_epochs=self.last_epoch + 1,
-                best_score=self.best,
-                best_epoch=self.last_epoch - self.patience - 1, ))
+    def print_summary(self):
+        print('Early stopping has triggered after {num_epochs} epochs.\n'
+              'Best score: {best_score:.3f}, observed at epoch #{best_epoch}'.
+              format(
+                  num_epochs=self.epochs_passed,
+                  best_score=self.best,
+                  best_epoch=self.epochs_passed - self.patience, ))

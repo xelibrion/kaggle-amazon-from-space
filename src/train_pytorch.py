@@ -33,6 +33,7 @@ def define_args():
         type=int,
         metavar='N',
         help='number of data loading workers (default: 4)')
+
     parser.add_argument(
         '--train-dir',
         default='../input/train-jpg',
@@ -40,29 +41,41 @@ def define_args():
         metavar='N',
         help='path to the folder containing images'
         'from train set (default: ../input/train-jpg/)')
+
     parser.add_argument(
         '--fold',
         default=1,
         type=int,
         metavar='N',
         help='fold to train on (default: 1)')
+
     parser.add_argument(
         '--use-gpu',
         default=False,
         action='store_true',
         help='flag indicates if we need to train on GPU (default: false)')
+
     parser.add_argument(
         '--epochs',
         default=90,
         type=int,
         metavar='N',
         help='number of total epochs to run')
+
     parser.add_argument(
         '--start-epoch',
         default=0,
         type=int,
         metavar='N',
         help='manual epoch number (useful on restarts)')
+
+    parser.add_argument(
+        '--epoch-size',
+        default=None,
+        type=int,
+        metavar='N',
+        help='manual epoch size (useful for debugging)')
+
     parser.add_argument(
         '-b',
         '--batch-size',
@@ -70,6 +83,7 @@ def define_args():
         type=int,
         metavar='N',
         help='mini-batch size (default: 256)')
+
     parser.add_argument(
         '--lr',
         '--learning-rate',
@@ -77,16 +91,10 @@ def define_args():
         type=float,
         metavar='LR',
         help='initial learning rate')
-    parser.add_argument(
-        '--print-freq',
-        '-p',
-        default=10,
-        type=int,
-        metavar='N',
-        help='print frequency (default: 10)')
+
     parser.add_argument(
         '--resume',
-        default='',
+        default='checkpoint.pth.tar',
         type=str,
         metavar='PATH',
         help='path to latest checkpoint (default: none)')
@@ -118,14 +126,16 @@ def create_model(num_classes):
 
 
 class KaggleAmazonDataset(Dataset):
-    def __init__(self, x_set, y_set, root_dir, transform=None):
+    def __init__(self, x_set, y_set, root_dir, transform=None,
+                 epoch_size=None):
         self.x = x_set
         self.y = y_set
         self.root_dir = root_dir
         self.transform = transform
+        self.epoch_size = epoch_size
 
     def __len__(self):
-        return len(self.x)
+        return self.epoch_size or len(self.x)
 
     def __getitem__(self, idx):
         img_name = os.path.join(self.root_dir, "{}.jpg".format(self.x[idx]))
@@ -188,6 +198,7 @@ def create_data_pipeline(num_classes):
             X_train,
             Y_train,
             root_dir=args.train_dir,
+            epoch_size=args.epoch_size,
             transform=transforms.Compose([
                 transforms.RandomSizedCrop(224),
                 augmentations.D4(),
@@ -209,6 +220,7 @@ def create_data_pipeline(num_classes):
             X_val,
             Y_val,
             root_dir=args.train_dir,
+            epoch_size=args.epoch_size,
             transform=transforms.Compose([
                 transforms.Scale(256),
                 transforms.CenterCrop(224),
@@ -241,20 +253,6 @@ def main():
     bootstrap_optimizer = torch.optim.Adam(bootstrap_params, args.lr)
     optimizer = torch.optim.Adam(full_params, args.lr)
 
-    # optionally resume from a checkpoint
-    if args.resume:
-        if os.path.isfile(args.resume):
-            print("=> loading checkpoint '{}'".format(args.resume))
-            checkpoint = torch.load(args.resume)
-            args.start_epoch = checkpoint['epoch']
-            best_fbeta = checkpoint['best_fbeta']
-            model.load_state_dict(checkpoint['state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer'])
-            print("=> loaded checkpoint '{}' (epoch {})"
-                  .format(args.resume, checkpoint['epoch']))
-        else:
-            print("=> no checkpoint found at '{}'".format(args.resume))
-
     cudnn.benchmark = True
 
     train_loader, val_loader = create_data_pipeline(num_classes)
@@ -267,6 +265,10 @@ def main():
         bootstrap_epochs=1,
         epochs=60,
         early_stopping=EarlyStopping(mode='max', patience=2))
+
+    if args.resume:
+        if os.path.isfile(args.resume):
+            tuner.restore_checkpoint(args.resume)
 
     tuner.run(train_loader, val_loader)
 

@@ -14,4 +14,4 @@
 - [ ] Descrease learning rate on plateu
 - [X] Tweak learning rate
 - [X] Implement early stopping
-- [ ] Make model state restorable
+- [X] Make model state restorable

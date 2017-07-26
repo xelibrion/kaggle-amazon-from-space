@@ -69,42 +69,65 @@ class Tuner:
         self.bootstrap_epochs = bootstrap_epochs
         self.epochs = epochs
         self.early_stopping = early_stopping
+        self.start_epoch = 0
+        self.best_score = 0
 
-    def run(self, train_loader, val_loader, start_epoch=0):
+    def run(self, train_loader, val_loader):
         self.bootstrap(train_loader)
+        self.train_nnet(train_loader, val_loader)
 
-        best_fbeta = np.Inf
-
-        for epoch in range(start_epoch, self.epochs):
-            # train for one epoch
+    def train_nnet(self, train_loader, val_loader):
+        for epoch in range(self.start_epoch, self.epochs):
             self.train_epoch(train_loader, self.optimizer,
                              'Epoch #{}'.format(epoch))
 
-            # evaluate on validation set
-            fbeta = self.validate(val_loader, 'Validating #{}'.format(epoch))
+            validation_score = self.validate(val_loader,
+                                             'Validating #{}'.format(epoch))
 
-            if self.early_stopping and self.early_stopping.should_trigger(
-                    epoch, fbeta):
-                print(self.early_stopping.description)
-                break
+            if self.early_stopping:
+                if self.early_stopping.should_trigger(
+                        epoch,
+                        validation_score, ):
+                    break
 
-            # remember best prec@1 and save checkpoint
-            is_best = fbeta > best_fbeta
-            best_fbeta = max(fbeta, best_fbeta)
-            self.save_checkpoint({
-                'epoch': epoch + 1,
-                'state_dict': self.model.state_dict(),
-                'best_fbeta': best_fbeta,
-                'optimizer': self.optimizer.state_dict(),
-            }, is_best)
+            self.save_checkpoint(validation_score, epoch)
 
-    def save_checkpoint(self, state, is_best, filename='checkpoint.pth.tar'):
+    def restore_checkpoint(self, checkpoint_file):
+        print("=> loading checkpoint '{}'".format(checkpoint_file))
+
+        checkpoint = torch.load(checkpoint_file)
+        self.start_epoch = checkpoint['epoch']
+        self.best_score = checkpoint['best_score']
+        self.model.load_state_dict(checkpoint['state_dict'])
+        self.optimizer.load_state_dict(checkpoint['optimizer'])
+
+        print("=> loaded checkpoint '{}' (epoch {})"
+              .format(checkpoint_file, checkpoint['epoch']))
+
+    def save_checkpoint(self,
+                        validation_score,
+                        epoch,
+                        filename='checkpoint.pth.tar'):
+
+        is_best = validation_score > self.best_score
+        self.best_score = max(validation_score, self.best_score)
+
+        state = {
+            'epoch': epoch + 1,
+            'state_dict': self.model.state_dict(),
+            'best_score': self.best_score,
+            'optimizer': self.optimizer.state_dict(),
+        }
+
         torch.save(state, filename)
         if is_best:
             shutil.copyfile(filename, 'model_best.pth.tar')
 
     def bootstrap(self, train_loader):
         """Bootstraps top layer(s) of the model before starting training"""
+
+        if self.start_epoch:
+            return
 
         for epoch in range(self.bootstrap_epochs):
             self.train_epoch(train_loader, self.bootstrap_optimizer,
