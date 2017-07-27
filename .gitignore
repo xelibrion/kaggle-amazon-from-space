@@ -1,2 +1,4 @@
 .venv
 input/*
+src/logs
+/src/*.png

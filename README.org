@@ -10,7 +10,7 @@
   - [X] Use contrast
   - [ ] Use rotate
   - [X] RandomSizedCrop
-- [ ] Add plots of learning curves
+- [X] Add plots of learning curves
 - [ ] Descrease learning rate on plateu
 - [X] Tweak learning rate
 - [X] Implement early stopping
