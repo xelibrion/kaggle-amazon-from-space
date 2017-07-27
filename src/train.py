@@ -50,12 +50,6 @@ def define_args():
         help='fold to train on (default: 1)')
 
     parser.add_argument(
-        '--use-gpu',
-        default=False,
-        action='store_true',
-        help='flag indicates if we need to train on GPU (default: false)')
-
-    parser.add_argument(
         '--epochs',
         default=90,
         type=int,
@@ -213,7 +207,7 @@ def create_data_pipeline(num_classes):
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.workers,
-        pin_memory=args.use_gpu)
+        pin_memory=torch.cuda.is_available())
 
     val_loader = torch.utils.data.DataLoader(
         KaggleAmazonDataset(
@@ -230,7 +224,7 @@ def create_data_pipeline(num_classes):
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.workers,
-        pin_memory=args.use_gpu)
+        pin_memory=torch.cuda.is_available())
 
     return train_loader, val_loader
 
@@ -246,7 +240,7 @@ def main():
         size_average=False,
         weight=torch.from_numpy(class_weights), )
 
-    if args.use_gpu:
+    if torch.cuda.is_available():
         model = model.cuda()
         criterion = criterion.cuda()
 
