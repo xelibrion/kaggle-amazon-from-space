@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+from os.path import join
 
 import numpy as np
 import pandas as pd
@@ -13,6 +14,8 @@ labels = [
     'slash_burn', 'water'
 ]
 
+DATA_ROOT = '../input'
+
 
 def encode_labels(df):
     tags = df['tags'].apply(lambda x: x.split(' ')).values
@@ -21,7 +24,7 @@ def encode_labels(df):
 
 
 def get_x_y():
-    df_train = pd.read_csv('../input/train_v2.csv')
+    df_train = pd.read_csv(join(DATA_ROOT, 'train_v2.csv'))
     y_train = encode_labels(df_train)
     return df_train['image_name'].values, y_train
 
@@ -83,13 +86,19 @@ def make_balanced_folds(y, num_folds=5):
     return s_fold.astype(int)
 
 
+def jpg_absolute_path(image_name):
+    return os.path.abspath(
+        join(DATA_ROOT, 'train-jpg', '{}.jpg'.format(image_name)))
+
+
 def make_splits():
     x, y = get_x_y()
     num_folds = 5
     s_fold = make_balanced_folds(y, num_folds)
 
     df = pd.DataFrame(y, columns=labels)
-    df['image_name'] = x
+    df['image_path'] = [jpg_absolute_path(x) for x in x]
+    df = df[['image_path'] + list(df.columns[:-1])]
     df['fold'] = s_fold
 
     for val_fold in reversed(range(num_folds)):
@@ -100,8 +109,14 @@ def make_splits():
 
         fold_dir = '../input/fold_{}'.format(num_folds - val_fold)
         os.makedirs(fold_dir, exist_ok=True)
-        train_df.to_csv(os.path.join(fold_dir, 'train.csv'), index=False)
-        val_df.to_csv(os.path.join(fold_dir, 'val.csv'), index=False)
+        train_df.to_csv(
+            os.path.join(fold_dir, 'train.csv'),
+            index=False,
+            columns=df.columns[:-1])
+        val_df.to_csv(
+            os.path.join(fold_dir, 'val.csv'),
+            index=False,
+            columns=df.columns[:-1])
 
 
 def main():

@@ -120,11 +120,9 @@ def create_model(num_classes):
 
 
 class KaggleAmazonDataset(Dataset):
-    def __init__(self, x_set, y_set, root_dir, transform=None,
-                 epoch_size=None):
+    def __init__(self, x_set, y_set, transform=None, epoch_size=None):
         self.x = x_set
         self.y = y_set
-        self.root_dir = root_dir
         self.transform = transform
         self.epoch_size = epoch_size
 
@@ -132,8 +130,7 @@ class KaggleAmazonDataset(Dataset):
         return self.epoch_size or len(self.x)
 
     def __getitem__(self, idx):
-        img_name = os.path.join(self.root_dir, "{}.jpg".format(self.x[idx]))
-        image = Image.open(img_name)
+        image = Image.open(self.x[idx])
         if image.mode == 'CMYK':
             image = image.convert('RGB')
 
@@ -171,18 +168,18 @@ class RandomHorizontalFlip(object):
         return img
 
 
-def create_data_pipeline(num_classes):
+def create_data_pipeline():
     print("Loading data")
 
     train_path = os.path.join('../input/fold_{}/train.csv'.format(args.fold))
     df_train = pd.read_csv(train_path)
-    X_train = df_train['image_name'].values
-    Y_train = df_train[df_train.columns[:num_classes]].values
+    X_train = df_train['image_path'].values
+    Y_train = df_train[df_train.columns.drop('image_path')].values
 
     val_path = os.path.join('../input/fold_{}/val.csv'.format(args.fold))
     df_val = pd.read_csv(val_path)
-    X_val = df_val['image_name'].values
-    Y_val = df_val[df_val.columns[:num_classes]].values
+    X_val = df_val['image_path'].values
+    Y_val = df_val[df_val.columns.drop('image_path')].values
 
     normalize = transforms.Normalize([0.302751, 0.344464, 0.315358],
                                      [0.127995, 0.132469, 0.152108])
@@ -191,7 +188,6 @@ def create_data_pipeline(num_classes):
         KaggleAmazonDataset(
             X_train,
             Y_train,
-            root_dir=args.train_dir,
             epoch_size=args.epoch_size,
             transform=transforms.Compose([
                 transforms.RandomSizedCrop(224),
@@ -213,7 +209,6 @@ def create_data_pipeline(num_classes):
         KaggleAmazonDataset(
             X_val,
             Y_val,
-            root_dir=args.train_dir,
             epoch_size=args.epoch_size,
             transform=transforms.Compose([
                 transforms.Scale(256),
@@ -249,7 +244,7 @@ def main():
 
     cudnn.benchmark = True
 
-    train_loader, val_loader = create_data_pipeline(num_classes)
+    train_loader, val_loader = create_data_pipeline()
 
     tuner = Tuner(
         model,
