@@ -135,8 +135,10 @@ class Tuner:
         scheduler = ReduceLROnPlateau(
             self.optimizer,
             'max',
+            threshold_mode='rel',
+            threshold=0.002,
             patience=5,
-            min_lr=1e-6,
+            min_lr=1e-7,
             verbose=True, )
 
         for epoch in range(self.start_epoch, self.epochs):
