@@ -81,7 +81,7 @@ def define_args():
     parser.add_argument(
         '--lr',
         '--learning-rate',
-        default=1e-4,
+        default=1e-2,
         type=float,
         metavar='LR',
         help='initial learning rate')
@@ -168,15 +168,15 @@ class RandomHorizontalFlip(object):
         return img
 
 
-def create_data_pipeline():
+def create_data_pipeline(fold):
     print("Loading data")
 
-    train_path = os.path.join('../input/fold_{}/train.csv'.format(args.fold))
+    train_path = os.path.join('../input/fold_{}/train.csv'.format(fold))
     df_train = pd.read_csv(train_path)
     X_train = df_train['image_path'].values
     Y_train = df_train[df_train.columns.drop('image_path')].values
 
-    val_path = os.path.join('../input/fold_{}/val.csv'.format(args.fold))
+    val_path = os.path.join('../input/fold_{}/val.csv'.format(fold))
     df_val = pd.read_csv(val_path)
     X_val = df_val['image_path'].values
     Y_val = df_val[df_val.columns.drop('image_path')].values
@@ -244,16 +244,16 @@ def main():
 
     cudnn.benchmark = True
 
-    train_loader, val_loader = create_data_pipeline()
+    train_loader, val_loader = create_data_pipeline(args.fold)
 
     tuner = Tuner(
         model,
         criterion,
         bootstrap_optimizer,
         optimizer,
-        bootstrap_epochs=1,
+        bootstrap_epochs=20,
         epochs=60,
-        early_stopping=EarlyStopping(mode='max', patience=2))
+        early_stopping=EarlyStopping(mode='max', patience=10))
 
     if args.resume:
         if os.path.isfile(args.resume):

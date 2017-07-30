@@ -11,7 +11,7 @@
   - [ ] Use rotate
   - [X] RandomSizedCrop
 - [X] Add plots of learning curves
-- [ ] Descrease learning rate on plateu
+- [X] Descrease learning rate on plateu
 - [X] Tweak learning rate
 - [X] Implement early stopping
 - [X] Make model state restorable

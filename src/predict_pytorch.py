@@ -82,8 +82,8 @@ def main():
     model.load_state_dict(checkpoint['state_dict'])
     model.eval()
 
-    normalize = transforms.Normalize((0.302751, 0.344464, 0.315358),
-                                     (0.127995, 0.132469, 0.152108))
+    normalize = transforms.Normalize([0.302751, 0.344464, 0.315358],
+                                     [0.127995, 0.132469, 0.152108])
 
     apply_aug = transforms.Compose([
         transforms.Scale(224),

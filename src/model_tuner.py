@@ -1,13 +1,16 @@
 import collections
 import json
-import os
 import shutil
 import time
+import os
 from datetime import datetime
 
 import numpy as np
 import torch
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
+
+from early_stopping import EarlyStopping
 
 
 def fbeta_score(y_true, y_pred, beta=2, threshold=0.2, eps=1e-9):
@@ -124,12 +127,22 @@ class Tuner:
         self.train_nnet(train_loader, val_loader)
 
     def train_nnet(self, train_loader, val_loader):
+
+        scheduler = ReduceLROnPlateau(
+            self.optimizer,
+            'max',
+            patience=5,
+            min_lr=1e-6,
+            verbose=True, )
+
         for epoch in range(self.start_epoch, self.epochs):
             self.train_epoch(train_loader, self.optimizer, epoch, 'training',
                              'Epoch #{epoch}')
 
             val_score = self.validate(val_loader, epoch, 'validation',
                                       'Validating #{epoch}')
+
+            scheduler.step(val_score)
 
             if self.early_stopping:
                 if self.early_stopping.should_trigger(
@@ -143,11 +156,16 @@ class Tuner:
         if self.start_epoch:
             return
 
+        bootstrap_stopping = EarlyStopping(mode='max', patience=2)
+
         for epoch in range(self.bootstrap_epochs):
             self.train_epoch(train_loader, self.bootstrap_optimizer, epoch,
                              'bootstrap', 'Bootstrapping #{epoch}')
-            self.validate(val_loader, epoch, 'bootstrap-val',
-                          'Validating #{epoch}')
+            val_score = self.validate(val_loader, epoch, 'bootstrap-val',
+                                      'Validating #{epoch}')
+
+            if bootstrap_stopping.should_trigger(val_score, epoch):
+                break
 
     def train_epoch(self, train_loader, optimizer, epoch, stage, format_str):
         batch_time = AverageMeter()
