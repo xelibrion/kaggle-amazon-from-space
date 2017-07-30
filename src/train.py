@@ -30,7 +30,7 @@ class ParseNumFolds(argparse.Action):
         if '-' in values:
             bounds = values.split('-')
             assert len(bounds) == 2
-            namespace.folds = list(range(int(bounds[0]), int(bounds[1])))
+            namespace.folds = list(range(int(bounds[0]), int(bounds[1]) + 1))
         else:
             namespace.folds = [int(values)]
 
