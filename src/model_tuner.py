@@ -137,7 +137,7 @@ class Tuner:
             'max',
             threshold_mode='rel',
             threshold=0.002,
-            patience=5,
+            patience=3,
             min_lr=1e-7,
             verbose=True, )
 
@@ -165,8 +165,8 @@ class Tuner:
         for epoch in range(self.bootstrap_epochs):
             self.train_epoch(train_loader, self.bootstrap_optimizer, epoch,
                              'bootstrap', 'Bootstrapping #{epoch}')
-            val_score = self.validate(val_loader, epoch, 'bootstrap-val',
-                                      'Validating #{epoch}')
+            self.validate(val_loader, epoch, 'bootstrap-val',
+                          'Validating #{epoch}')
 
     def train_epoch(self, train_loader, optimizer, epoch, stage, format_str):
         batch_time = AverageMeter()

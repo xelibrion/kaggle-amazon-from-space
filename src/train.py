@@ -279,7 +279,7 @@ def main():
             bootstrap_optimizer,
             optimizer,
             tag='fold_{}'.format(fold),
-            early_stopping=EarlyStopping(mode='max', patience=10))
+            early_stopping=EarlyStopping(mode='max', patience=7))
 
         if args.resume:
             if os.path.isfile(args.resume):
