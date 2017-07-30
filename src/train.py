@@ -112,7 +112,7 @@ def define_args():
 best_fbeta = 0
 
 
-def create_model(num_classes):
+def create_model(num_classes, initial_lr):
     print("=> using pre-trained model resnet50")
     model = models.resnet50(pretrained=True)
 
@@ -121,7 +121,23 @@ def create_model(num_classes):
 
     model.fc = nn.Linear(2048, num_classes)
 
-    return model, model.fc.parameters(), model.parameters()
+    optim_config = [{
+        'params': model.layer1.parameters(),
+        'lr': initial_lr * 1e-3
+    }, {
+        'params': model.layer2.parameters(),
+        'lr': initial_lr * 1e-3
+    }, {
+        'params': model.layer3.parameters(),
+        'lr': initial_lr * 1e-2
+    }, {
+        'params': model.layer4.parameters(),
+        'lr': initial_lr * 1e-2
+    }, {
+        'params': model.fc.parameters()
+    }]
+
+    return model, model.fc.parameters(), optim_config
 
 
 class KaggleAmazonDataset(Dataset):
@@ -241,7 +257,9 @@ def main():
 
     for fold in args.folds:
 
-        model, bootstrap_params, full_params = create_model(num_classes)
+        model, bootstrap_params, full_params = create_model(
+            num_classes,
+            args.lr, )
         criterion = nn.MultiLabelSoftMarginLoss(
             size_average=False,
             weight=torch.from_numpy(class_weights), )
