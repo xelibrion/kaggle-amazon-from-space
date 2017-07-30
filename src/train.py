@@ -22,6 +22,19 @@ from early_stopping import EarlyStopping
 from torchvision import models
 
 
+class ParseNumFolds(argparse.Action):
+    def __init__(self, option_strings, dest, nargs=None, **kwargs):
+        super(ParseNumFolds, self).__init__(option_strings, dest, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        if '-' in values:
+            bounds = values.split('-')
+            assert len(bounds) == 2
+            namespace.folds = list(range(int(bounds[0]), int(bounds[1])))
+        else:
+            namespace.folds = [int(values)]
+
+
 def define_args():
 
     parser = argparse.ArgumentParser(description='Kaggle Amazon from Space')
@@ -43,10 +56,10 @@ def define_args():
         'from train set (default: ../input/train-jpg/)')
 
     parser.add_argument(
-        '--fold',
-        default=1,
-        type=int,
-        metavar='N',
+        '--folds',
+        default=[1],
+        action=ParseNumFolds,
+        metavar='N or M-N',
         help='fold to train on (default: 1)')
 
     parser.add_argument(
@@ -73,10 +86,10 @@ def define_args():
     parser.add_argument(
         '-b',
         '--batch-size',
-        default=256,
+        default=72,
         type=int,
         metavar='N',
-        help='mini-batch size (default: 256)')
+        help='mini-batch size (default: 72)')
 
     parser.add_argument(
         '--lr',
@@ -100,7 +113,6 @@ best_fbeta = 0
 
 
 def create_model(num_classes):
-    # create model
     print("=> using pre-trained model resnet50")
     model = models.resnet50(pretrained=True)
 
@@ -108,13 +120,6 @@ def create_model(num_classes):
     #     param.requires_grad = False
 
     model.fc = nn.Linear(2048, num_classes)
-
-    # for param in itertools.chain(model.layer3.parameters(),
-    #                              model.fc.parameters()):
-    #     param.requires_grad = True
-
-    # return model, itertools.chain(model.layer3.parameters(),
-    #                               model.fc.parameters())
 
     return model, model.fc.parameters(), model.parameters()
 
@@ -230,36 +235,39 @@ def main():
     args = parser.parse_args()
 
     num_classes = 17
-    model, bootstrap_params, full_params = create_model(num_classes)
-    criterion = nn.MultiLabelSoftMarginLoss(
-        size_average=False,
-        weight=torch.from_numpy(class_weights), )
-
-    if torch.cuda.is_available():
-        model = model.cuda()
-        criterion = criterion.cuda()
-
-    bootstrap_optimizer = torch.optim.Adam(bootstrap_params, args.lr)
-    optimizer = torch.optim.Adam(full_params, args.lr)
-
     cudnn.benchmark = True
 
-    train_loader, val_loader = create_data_pipeline(args.fold)
+    print('Training model(s) for folds: {}'.format(args.folds))
 
-    tuner = Tuner(
-        model,
-        criterion,
-        bootstrap_optimizer,
-        optimizer,
-        bootstrap_epochs=20,
-        epochs=60,
-        early_stopping=EarlyStopping(mode='max', patience=10))
+    for fold in args.folds:
 
-    if args.resume:
-        if os.path.isfile(args.resume):
-            tuner.restore_checkpoint(args.resume)
+        model, bootstrap_params, full_params = create_model(num_classes)
+        criterion = nn.MultiLabelSoftMarginLoss(
+            size_average=False,
+            weight=torch.from_numpy(class_weights), )
 
-    tuner.run(train_loader, val_loader)
+        if torch.cuda.is_available():
+            model = model.cuda()
+            criterion = criterion.cuda()
+
+        bootstrap_optimizer = torch.optim.Adam(bootstrap_params, args.lr)
+        optimizer = torch.optim.Adam(full_params, args.lr)
+
+        train_loader, val_loader = create_data_pipeline(fold)
+
+        tuner = Tuner(
+            model,
+            criterion,
+            bootstrap_optimizer,
+            optimizer,
+            tag='fold_{}'.format(fold),
+            early_stopping=EarlyStopping(mode='max', patience=10))
+
+        if args.resume:
+            if os.path.isfile(args.resume):
+                tuner.restore_checkpoint(args.resume)
+
+        tuner.run(train_loader, val_loader)
 
 
 if __name__ == '__main__':

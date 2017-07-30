@@ -77,9 +77,10 @@ class Tuner:
                  criterion,
                  bootstrap_optimizer,
                  optimizer,
-                 bootstrap_epochs,
-                 epochs,
-                 early_stopping=None):
+                 bootstrap_epochs=1,
+                 epochs=200,
+                 early_stopping=None,
+                 tag=None):
         self.model = model
         self.criterion = criterion
         self.bootstrap_optimizer = bootstrap_optimizer
@@ -88,8 +89,10 @@ class Tuner:
         self.epochs = epochs
         self.early_stopping = early_stopping
         self.start_epoch = 0
-        self.best_score = 0
-        self.emit = Emitter('./logs/events.json')
+        self.best_score = -float('Inf')
+        self.tag = tag
+        self.emit = Emitter('./logs/events.json' if not tag else
+                            './logs/events_{}.json'.format(tag))
 
     def restore_checkpoint(self, checkpoint_file):
         print("=> loading checkpoint '{}'".format(checkpoint_file))
@@ -103,10 +106,11 @@ class Tuner:
         print("=> loaded checkpoint '{}' (epoch {})"
               .format(checkpoint_file, checkpoint['epoch']))
 
-    def save_checkpoint(self,
-                        validation_score,
-                        epoch,
-                        filename='checkpoint.pth.tar'):
+    def save_checkpoint(self, validation_score, epoch):
+        checkpoint_filename = ('checkpoint.pth.tar' if not self.tag else
+                               'checkpoint_{}.pth.tar'.format(self.tag))
+        best_model_filename = ('model_best.pth.tar' if not self.tag else
+                               'model_best_{}.pth.tar'.format(self.tag))
 
         is_best = validation_score > self.best_score
         self.best_score = max(validation_score, self.best_score)
@@ -118,9 +122,9 @@ class Tuner:
             'optimizer': self.optimizer.state_dict(),
         }
 
-        torch.save(state, filename)
+        torch.save(state, checkpoint_filename)
         if is_best:
-            shutil.copyfile(filename, 'model_best.pth.tar')
+            shutil.copyfile(checkpoint_filename, best_model_filename)
 
     def run(self, train_loader, val_loader):
         self.bootstrap(train_loader, val_loader)
@@ -156,16 +160,11 @@ class Tuner:
         if self.start_epoch:
             return
 
-        bootstrap_stopping = EarlyStopping(mode='max', patience=2)
-
         for epoch in range(self.bootstrap_epochs):
             self.train_epoch(train_loader, self.bootstrap_optimizer, epoch,
                              'bootstrap', 'Bootstrapping #{epoch}')
             val_score = self.validate(val_loader, epoch, 'bootstrap-val',
                                       'Validating #{epoch}')
-
-            if bootstrap_stopping.should_trigger(val_score, epoch):
-                break
 
     def train_epoch(self, train_loader, optimizer, epoch, stage, format_str):
         batch_time = AverageMeter()
