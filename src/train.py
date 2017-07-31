@@ -2,23 +2,22 @@
 
 import argparse
 import os
-import random
 
-import torch.nn as nn
 import numpy as np
 import pandas as pd
 import torch
 import torch.backends.cudnn as cudnn
+import torch.nn as nn
 import torch.nn.parallel
 import torch.optim
 import torch.utils.data
 from PIL import Image
 from torch.utils.data import Dataset
 
-import torchvision.transforms as transforms
-from model_tuner import Tuner
 import augmentations
+import torchvision.transforms as transforms
 from early_stopping import EarlyStopping
+from model_tuner import Tuner
 from torchvision import models
 
 
@@ -109,9 +108,6 @@ def define_args():
     return parser
 
 
-best_fbeta = 0
-
-
 def create_model(num_classes, initial_lr):
     print("=> using pre-trained model resnet50")
     model = models.resnet50(pretrained=True)
@@ -179,17 +175,7 @@ class_weights = np.array([
 ], 'float32')
 
 
-class RandomHorizontalFlip(object):
-    def __init__(self, p=0.5):
-        self.p = p
-
-    def __call__(self, img):
-        if random.random() < self.p:
-            return img.transpose(Image.FLIP_LEFT_RIGHT)
-        return img
-
-
-def create_data_pipeline(fold):
+def create_data_pipeline(fold, args):
     print("Loading data")
 
     train_path = os.path.join('../input/fold_{}/train.csv'.format(fold))
@@ -246,7 +232,6 @@ def create_data_pipeline(fold):
 
 
 def main():
-    global args, best_fbeta
     parser = define_args()
     args = parser.parse_args()
 
@@ -271,7 +256,7 @@ def main():
         bootstrap_optimizer = torch.optim.Adam(bootstrap_params, args.lr)
         optimizer = torch.optim.Adam(full_params, args.lr)
 
-        train_loader, val_loader = create_data_pipeline(fold)
+        train_loader, val_loader = create_data_pipeline(fold, args)
 
         tuner = Tuner(
             model,
