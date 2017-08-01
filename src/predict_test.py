@@ -2,12 +2,12 @@
 
 import argparse
 import os
+from os.path import join
 
 import numpy as np
 import pandas as pd
 import torch
 import torch.backends.cudnn as cudnn
-import torch.nn as nn
 import torch.nn.parallel
 import torch.optim
 import torch.utils.data
@@ -16,6 +16,8 @@ from tqdm import tqdm
 import torchvision.transforms as transforms
 from model_tuner import as_variable
 from train import KaggleAmazonDataset, ParseNumFolds, create_model
+
+DATA_ROOT = '../input'
 
 
 def define_args():
@@ -56,21 +58,22 @@ def define_args():
     return parser
 
 
-def create_data_pipeline(fold, args):
-    print("Loading data")
+def jpg_absolute_path(image_name):
+    return os.path.abspath(
+        join(DATA_ROOT, 'test-jpg', '{}.jpg'.format(image_name)))
 
-    val_path = os.path.join('../input/fold_{}/val.csv'.format(fold))
-    df_val = pd.read_csv(val_path)
-    X_val = df_val['image_path'].values
-    Y_val = df_val[df_val.columns.drop('image_path')].values
+
+def create_data_pipeline(num_classes, args):
+    df = pd.read_csv('../input/sample_submission_v2.csv')
+    X_test = df['image_name'].apply(lambda x: jpg_absolute_path(x))
 
     normalize = transforms.Normalize([0.302751, 0.344464, 0.315358],
                                      [0.127995, 0.132469, 0.152108])
 
-    val_loader = torch.utils.data.DataLoader(
+    test_loader = torch.utils.data.DataLoader(
         KaggleAmazonDataset(
-            X_val,
-            Y_val,
+            X_test,
+            np.zeros((X_test.values.shape[0], num_classes)),
             transform=transforms.Compose([
                 transforms.Scale(224),
                 transforms.ToTensor(),
@@ -81,7 +84,7 @@ def create_data_pipeline(fold, args):
         num_workers=args.workers,
         pin_memory=torch.cuda.is_available())
 
-    return val_loader
+    return test_loader
 
 
 def main():
@@ -91,7 +94,7 @@ def main():
     num_classes = 17
     cudnn.benchmark = True
 
-    print('Predicting OOF data using model for folds: {}'.format(args.folds))
+    print('Predicting test data using model for folds: {}'.format(args.folds))
 
     for fold in args.folds:
 
@@ -106,12 +109,12 @@ def main():
 
         model.eval()
 
-        val_loader = create_data_pipeline(fold, args)
-        tq = tqdm(total=len(val_loader) * val_loader.batch_size)
+        test_loader = create_data_pipeline(num_classes, args)
+        tq = tqdm(total=len(test_loader) * test_loader.batch_size)
 
         predict_batches = []
 
-        for i, (inputs, target) in enumerate(val_loader):
+        for i, (inputs, target) in enumerate(test_loader):
 
             input_var = as_variable(inputs, volatile=True)
 
@@ -119,12 +122,12 @@ def main():
             prob_output = torch.sigmoid(output)
             predict_batches.append(prob_output.data.cpu().numpy())
 
-            tq.update(val_loader.batch_size)
+            tq.update(test_loader.batch_size)
 
         tq.close()
 
         result = np.vstack(predict_batches)
-        np.save('./oof_predict_fold_{}.npy'.format(fold), result)
+        np.save('./test_predict_fold_{}.npy'.format(fold), result)
 
 
 if __name__ == '__main__':
