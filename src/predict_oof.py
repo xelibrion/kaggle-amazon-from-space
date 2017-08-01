@@ -116,7 +116,8 @@ def main():
             input_var = as_variable(inputs, volatile=True)
 
             output = model(input_var)
-            predict_batches.append(output.data.cpu().numpy())
+            prob_output = torch.sigmoid(output)
+            predict_batches.append(prob_output.data.cpu().numpy())
 
             tq.update(val_loader.batch_size)
 
