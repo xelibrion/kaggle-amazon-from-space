@@ -21,6 +21,17 @@ def mean_score(num_folds):
     return (np_predict > THRESHOLDS).astype(int)
 
 
+def voting(num_folds):
+    np_folds = [
+        np.load('./test_predict_fold_{}.npy'.format(x))
+        for x in range(1, num_folds + 1)
+    ]
+    predicts = [x > THRESHOLDS for x in np_folds]
+    votes = np.sum(predicts, axis=0)
+    votes_threshold = int(num_folds / 2)
+    return (votes > votes_threshold).astype(int)
+
+
 def fit_binariser():
     mlb = MultiLabelBinarizer(labels)
     dtype = np.int if all(isinstance(c, int) for c in mlb.classes) else object
