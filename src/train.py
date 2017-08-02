@@ -125,10 +125,10 @@ def create_model(num_classes, initial_lr):
         'lr': initial_lr * 1e-3
     }, {
         'params': model.layer3.parameters(),
-        'lr': initial_lr * 1e-2
+        'lr': initial_lr * 0.1
     }, {
         'params': model.layer4.parameters(),
-        'lr': initial_lr * 1e-2
+        'lr': initial_lr * 0.1
     }, {
         'params': model.fc.parameters()
     }]
@@ -200,6 +200,7 @@ def create_data_pipeline(fold, args):
                 transforms.RandomSizedCrop(224),
                 augmentations.D4(),
                 augmentations.Add(-5, 5, per_channel=True),
+                augmentations.Dropout(p=0.03),
                 augmentations.ContrastNormalization(
                     0.8,
                     1.2,
@@ -218,7 +219,6 @@ def create_data_pipeline(fold, args):
             Y_val,
             epoch_size=args.epoch_size,
             transform=transforms.Compose([
-                transforms.Scale(256),
                 transforms.CenterCrop(224),
                 transforms.ToTensor(),
                 normalize,
@@ -245,9 +245,7 @@ def main():
         model, bootstrap_params, full_params = create_model(
             num_classes,
             args.lr, )
-        criterion = nn.MultiLabelSoftMarginLoss(
-            size_average=False,
-            weight=torch.from_numpy(class_weights), )
+        criterion = nn.MultiLabelSoftMarginLoss()
 
         if torch.cuda.is_available():
             model = model.cuda()

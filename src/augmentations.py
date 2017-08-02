@@ -65,3 +65,20 @@ class ContrastNormalization(object):
         img_n = contrastor.augment_image(img_array)
 
         return Image.fromarray(img_n, mode='RGB')
+
+
+class Dropout(object):
+    """Changes contrast
+    """
+
+    def __init__(self, p, per_channel=True):
+        self.p = p
+        self.per_channel = per_channel
+
+    def __call__(self, img):
+        img_array = np.array(img)
+
+        transform = iaa.Dropout(p=self.p, per_channel=self.per_channel)
+        img_n = transform.augment_image(img_array)
+
+        return Image.fromarray(img_n, mode='RGB')
