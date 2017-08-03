@@ -3,3 +3,4 @@ input/*
 src/logs
 /src/*.png
 __pycache__
+*.npy
