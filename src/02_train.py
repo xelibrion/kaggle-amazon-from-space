@@ -109,20 +109,20 @@ def define_args():
 
 
 def create_model(num_classes, initial_lr):
-    print("=> using pre-trained model resnet50")
-    model = models.resnet50(pretrained=True)
+    print("=> using pre-trained model resnet34")
+    model = models.resnet34(pretrained=True)
 
     # for param in model.parameters():
     #     param.requires_grad = False
 
-    model.fc = nn.Linear(2048, num_classes)
+    model.fc = nn.Linear(512, num_classes)
 
     optim_config = [{
         'params': model.layer1.parameters(),
-        'lr': initial_lr * 1e-3
+        'lr': initial_lr * 0.1**2
     }, {
         'params': model.layer2.parameters(),
-        'lr': initial_lr * 1e-3
+        'lr': initial_lr * 0.1**2
     }, {
         'params': model.layer3.parameters(),
         'lr': initial_lr * 0.1
@@ -197,14 +197,15 @@ def create_data_pipeline(fold, args):
             Y_train,
             epoch_size=args.epoch_size,
             transform=transforms.Compose([
-                transforms.RandomSizedCrop(224),
+                transforms.Scale(224),
+                # transforms.RandomSizedCrop(224),
                 augmentations.D4(),
-                augmentations.Add(-5, 5, per_channel=True),
-                augmentations.Dropout(p=0.03),
-                augmentations.ContrastNormalization(
-                    0.8,
-                    1.2,
-                    per_channel=True, ),
+                # augmentations.Add(-5, 5, per_channel=True),
+                # augmentations.Dropout(p=0.03),
+                # augmentations.ContrastNormalization(
+                #     0.8,
+                #     1.2,
+                #     per_channel=True, ),
                 transforms.ToTensor(),
                 normalize,
             ])),
@@ -219,7 +220,7 @@ def create_data_pipeline(fold, args):
             Y_val,
             epoch_size=args.epoch_size,
             transform=transforms.Compose([
-                transforms.CenterCrop(224),
+                transforms.Scale(224),
                 transforms.ToTensor(),
                 normalize,
             ])),
@@ -245,7 +246,7 @@ def main():
         model, bootstrap_params, full_params = create_model(
             num_classes,
             args.lr, )
-        criterion = nn.MultiLabelSoftMarginLoss()
+        criterion = torch.nn.MultiLabelSoftMarginLoss()
 
         if torch.cuda.is_available():
             model = model.cuda()

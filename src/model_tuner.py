@@ -10,18 +10,9 @@ import torch
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
 
-THRESHOLDS = np.array([
-    0.185, 0.148, 0.164, 0.314, 0.193, 0.156, 0.05, 0.101, 0.192, 0.186, 0.169,
-    0.213, 0.211, 0.183, 0.141, 0.289, 0.175
-], 'float32')
-
 
 def fbeta_score(y_true, y_pred, beta=2, threshold=0.2, eps=1e-9):
     beta_sq = beta**2
-
-    threshold = torch.from_numpy(THRESHOLDS)
-    if torch.cuda.is_available():
-        threshold = threshold.cuda()
 
     y_pred = torch.ge(torch.sigmoid(y_pred.float()), threshold).float()
     y_true = y_true.float()
@@ -213,7 +204,7 @@ class Tuner:
                 batch_time='{:.3f}'.format(batch_time.mavg),
                 loss='{:.3f}'.format(losses.mavg),
                 f_beta='{:.3f}'.format(f2_meter.mavg), )
-            tq.update(batch_size)
+            tq.update(train_loader.batch_size)
 
             self.emit({
                 'stage': stage,
@@ -262,7 +253,7 @@ class Tuner:
                 batch_time='{:.3f}'.format(batch_time.mavg),
                 loss='{:.3f}'.format(losses.mavg),
                 f_beta='{:.3f}'.format(f2_meter.mavg), )
-            tq.update(batch_size)
+            tq.update(val_loader.batch_size)
 
             self.emit({
                 'stage': stage,
