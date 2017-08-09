@@ -173,7 +173,7 @@ class Tuner:
 
         self.model.train()
 
-        tq = tqdm(total=len(train_loader) * train_loader.batch_size)
+        tq = tqdm(total=len(train_loader))
         description = format_str.format(**locals())
         tq.set_description('{:16}'.format(description))
 
@@ -204,7 +204,7 @@ class Tuner:
                 batch_time='{:.3f}'.format(batch_time.mavg),
                 loss='{:.3f}'.format(losses.mavg),
                 f_beta='{:.3f}'.format(f2_meter.mavg), )
-            tq.update(train_loader.batch_size)
+            tq.update()
 
             self.emit({
                 'stage': stage,
@@ -226,7 +226,7 @@ class Tuner:
         # switch to evaluate mode
         self.model.eval()
 
-        tq = tqdm(total=len(val_loader) * val_loader.batch_size)
+        tq = tqdm(total=len(val_loader))
         description = format_str.format(**locals())
         tq.set_description('{:16}'.format(description))
 
@@ -253,7 +253,7 @@ class Tuner:
                 batch_time='{:.3f}'.format(batch_time.mavg),
                 loss='{:.3f}'.format(losses.mavg),
                 f_beta='{:.3f}'.format(f2_meter.mavg), )
-            tq.update(val_loader.batch_size)
+            tq.update()
 
             self.emit({
                 'stage': stage,
