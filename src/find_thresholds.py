@@ -5,6 +5,8 @@ import pandas as pd
 from sklearn.metrics import fbeta_score
 from tqdm import tqdm
 
+NUM_CLASSES = 17
+
 
 def optimise_f2_thresholds(true_label,
                            prediction,
@@ -13,9 +15,14 @@ def optimise_f2_thresholds(true_label,
 
     thresholds = init_thresholds
 
-    for i in tqdm(range(17), desc='Looking for optimal F2 thresholds'):
+    tq = tqdm(
+        total=NUM_CLASSES * resolution,
+        desc='Looking for optimal F2 thresholds')
+
+    for i in range(NUM_CLASSES):
         best_i2 = 0
         best_score = 0
+
         for i2 in range(resolution):
             i2 /= resolution
             thresholds[i] = i2
@@ -27,6 +34,8 @@ def optimise_f2_thresholds(true_label,
             if score > best_score:
                 best_i2 = i2
                 best_score = score
+            tq.update()
+
         thresholds[i] = best_i2
 
     return thresholds, best_score
