@@ -12,7 +12,7 @@ dependencies:
 - pandas
 - pip
 - pyflakes
-- python=3.5
+- python=3.6
 - scikit-learn
 - scipy
 - seaborn
