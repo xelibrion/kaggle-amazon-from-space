@@ -1,17 +1,8 @@
-* TODO Things to fix
-- [X] Create class-balanced folds and use them instead of class weights
-- [X] Use 2-pass training:
-  - Top linear layer first
-  - Once converged, train full model
-- Augmentations:
-  - [X] Use D4
-  - [X] Use colour jitter
-  - [ ] Use zoom
-  - [X] Use contrast
-  - [ ] Use rotate
-  - [X] RandomSizedCrop
-- [X] Add plots of learning curves
-- [X] Descrease learning rate on plateu
-- [X] Tweak learning rate
-- [X] Implement early stopping
-- [X] Make model state restorable
+* What is this repository?
+
+- ./train.py -b 192 --lr 0.01 --folds 1-5
+- ./predict_oof.py --folds 1-5
+- ./predict_test.py --folds 1-5
+- ./find_thresholds.py
+- Update ./prepare_submit.py with new thresholds
+- ./prepare_submit.py
