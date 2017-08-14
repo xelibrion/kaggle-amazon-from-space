@@ -1,8 +1,28 @@
 * What is this repository?
 
-- ./train.py -b 192 --lr 0.01 --folds 1-5
-- ./predict_oof.py --folds 1-5
-- ./predict_test.py --folds 1-5
-- ./find_thresholds.py
-- Update ./prepare_submit.py with new thresholds
-- ./prepare_submit.py
+This repository contains my code for a Kaggle competition [[https://www.kaggle.com/c/planet-understanding-the-amazon-from-space][Planet: Understanding the Amazon from Space]].
+
+The code *IS NOT PRODUCTION READY* and should be considered a research project.
+
+* Preparing ready-to-go submit
+
+#+BEGIN_SRC sh
+./train.py -b 192 --lr 0.01 --folds 1-5
+#+END_SRC
+
+#+BEGIN_SRC sh
+./predict_oof.py --folds 1-5
+#+END_SRC
+
+#+BEGIN_SRC sh
+./predict_test.py --folds 1-5
+#+END_SRC
+
+#+BEGIN_SRC sh
+./find_thresholds.py
+#+END_SRC
+
+Update ./prepare_submit.py with new thresholds
+#+BEGIN_SRC sh
+./prepare_submit.py
+#+END_SRC
